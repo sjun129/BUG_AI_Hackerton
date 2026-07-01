@@ -14,24 +14,36 @@ export default function CongestionChart({ forecast }: CongestionChartProps) {
   }));
 
   return (
-    <div>
-      <p className="mb-2 text-sm text-[var(--color-ink-soft)]">
-        현재 혼잡도:{" "}
-        <span className="font-medium text-[var(--color-ink)]">
-          {Math.round(forecast.currentLevel * 100)}%
-        </span>
-      </p>
-      <div className="h-56 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-            <XAxis dataKey="time" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-            <YAxis domain={[0, 1]} tick={{ fontSize: 11 }} stroke="#94a3b8" />
-            <Tooltip formatter={(value: number) => `${Math.round(value * 100)}%`} />
-            <Area type="monotone" dataKey="level" stroke="#38bdf8" fill="#38bdf8" fillOpacity={0.25} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
+    <div className="h-64 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
+          <defs>
+            <linearGradient id="congGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#2f6bff" stopOpacity={0.28} />
+              <stop offset="100%" stopColor="#2f6bff" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(10,24,48,0.08)" />
+          <XAxis dataKey="time" tick={{ fontSize: 11, fill: "#8a97b3" }} stroke="#d3ddf2" />
+          <YAxis domain={[0, 1]} tick={{ fontSize: 11, fill: "#8a97b3" }} stroke="#d3ddf2" />
+          <Tooltip
+            formatter={(value: number) => [`${Math.round(value * 100)}%`, "혼잡도"]}
+            contentStyle={{
+              borderRadius: 12,
+              border: "1px solid rgba(10,24,48,.08)",
+              boxShadow: "0 8px 24px rgba(20,40,90,.12)",
+              fontSize: 12,
+            }}
+          />
+          <Area
+            type="monotone"
+            dataKey="level"
+            stroke="#2f6bff"
+            strokeWidth={2.5}
+            fill="url(#congGrad)"
+          />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   );
 }

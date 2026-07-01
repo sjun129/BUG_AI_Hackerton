@@ -8,7 +8,7 @@ import { parseAdvisorResult } from "@/backend/advisor/parse";
 
 export const runtime = "nodejs";
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
     if (!process.env.OPENAI_API_KEY) {
       return Response.json(
@@ -17,8 +17,17 @@ export async function POST() {
       );
     }
 
+    // 채팅 입력(선택). 본문이 비었거나 잘못된 JSON이어도 안전하게 무시한다.
+    let userMessage: string | undefined;
+    try {
+      const body = await req.json();
+      if (body && typeof body.message === "string") userMessage = body.message;
+    } catch {
+      // 본문 없음 — 일반 운영 권고로 처리
+    }
+
     const congestion = computeCongestionForecast(MOCK_SHIPS, BUSAN_PORT);
-    const prompt = buildAdvisorPrompt(MOCK_SHIPS, congestion);
+    const prompt = buildAdvisorPrompt(MOCK_SHIPS, congestion, userMessage);
 
     const { text } = await generateText({ model: advisorModel, prompt });
     const result = parseAdvisorResult(text);
