@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0b1220;
+  --surface: #111a2c;
+  --ink: #e7ecf5;
+  --ink-soft: #94a3b8;
+  --accent: #38bdf8;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), -apple-system, "Apple SD Gothic Neo", "Pretendard",
+    system-ui, sans-serif;
+
+  --color-bg: #0b1220;
+  --color-surface: #111a2c;
+  --color-ink: #e7ecf5;
+  --color-ink-soft: #94a3b8;
+  --color-accent: #38bdf8;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background-color: var(--surface);
+}
