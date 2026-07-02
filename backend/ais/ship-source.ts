@@ -16,6 +16,14 @@ interface ShipRow {
   eta: string;
   status: Ship["status"];
   destination_berth_id: string | null;
+  call_sign: string | null;
+  // ── Port-MIS 보강 필드 — shipToRow는 이 컬럼들을 절대 쓰지 않는다(아래 주석 참고) ──
+  previous_port: string | null;
+  next_port: string | null;
+  berth_name: string | null;
+  gross_tonnage: number | null;
+  crew_count: number | null;
+  agent_company: string | null;
 }
 
 function rowToShip(r: ShipRow): Ship {
@@ -29,11 +37,25 @@ function rowToShip(r: ShipRow): Ship {
     eta: new Date(r.eta).toISOString(),
     status: r.status,
     ...(r.destination_berth_id ? { destinationBerthId: r.destination_berth_id } : {}),
+    ...(r.call_sign ? { callSign: r.call_sign } : {}),
+    ...(r.previous_port ? { previousPort: r.previous_port } : {}),
+    ...(r.next_port ? { nextPort: r.next_port } : {}),
+    ...(r.berth_name ? { berthName: r.berth_name } : {}),
+    ...(r.gross_tonnage != null ? { grossTonnage: r.gross_tonnage } : {}),
+    ...(r.crew_count != null ? { crewCount: r.crew_count } : {}),
+    ...(r.agent_company ? { agentCompany: r.agent_company } : {}),
   };
 }
 
-/** Ship → DB row (seed/insert 용). */
-export function shipToRow(s: Ship): ShipRow {
+/**
+ * Ship → DB row (seed/insert 용). 위치·상태 등 AIS 소스 필드만 채운다 — Port-MIS 보강
+ * 필드(previous_port 등)는 절대 포함하지 않는다. AIS 수집은 10초마다 upsert하는데,
+ * 여기 보강 필드를 포함시키면 그때마다 null로 덮어써서 backend/portmis/run-enrich.ts가
+ * 채운 값이 곧바로 지워진다. 보강 필드는 run-enrich.ts가 별도 update로만 채운다.
+ */
+export function shipToRow(
+  s: Ship
+): Omit<ShipRow, "previous_port" | "next_port" | "berth_name" | "gross_tonnage" | "crew_count" | "agent_company"> {
   return {
     mmsi: s.mmsi,
     name: s.name,
@@ -44,6 +66,7 @@ export function shipToRow(s: Ship): ShipRow {
     eta: s.eta,
     status: s.status,
     destination_berth_id: s.destinationBerthId ?? null,
+    call_sign: s.callSign ?? null,
   };
 }
 

@@ -17,6 +17,17 @@ export interface Ship {
   eta: string; // ISO 8601
   status: ShipStatus;
   destinationBerthId?: string;
+
+  // ── Port-MIS(해양수산부_선박운항정보) 입출항 신고 매칭 보강 필드 ──
+  // AIS는 실시간 위치만 주고 "직전/다음 항구"가 없다. backend/portmis가 호출부호(callSign)
+  // 또는 선박명으로 매칭해 채운다 — 전부 optional: 매칭 안 되면 그냥 비워둔다.
+  callSign?: string; // 호출부호 — AIS ShipStaticData와 Port-MIS clsgn을 잇는 매칭 키
+  previousPort?: string; // 직전 출항항
+  nextPort?: string; // 다음 기항지
+  berthName?: string; // Port-MIS 신고상의 실제 접안/정박 시설명
+  grossTonnage?: number; // 총톤수
+  crewCount?: number; // 승무원수
+  agentCompany?: string; // 선박관리/대리점 업체명
 }
 
 // 선석 — 선박이 접안하는 시설

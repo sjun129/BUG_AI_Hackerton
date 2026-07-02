@@ -100,6 +100,15 @@ export default function ShipMap({ ships, selectedMmsi, onSelect, currentLevel }:
               <p>속력: {ship.sog}kn</p>
               <p>침로: {ship.cog}°</p>
               <p>ETA: {new Date(ship.eta).toLocaleString("ko-KR")}</p>
+              {/* Port-MIS 입출항 신고 매칭 결과(있을 때만) — backend/portmis/run-enrich.ts */}
+              {(ship.previousPort || ship.nextPort || ship.berthName) && (
+                <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid #e5e7eb" }}>
+                  {ship.previousPort && <p>직전 출항항: {ship.previousPort}</p>}
+                  {ship.nextPort && <p>다음 기항지: {ship.nextPort}</p>}
+                  {ship.berthName && <p>선석: {ship.berthName}</p>}
+                  {ship.grossTonnage != null && <p>총톤수: {ship.grossTonnage.toLocaleString()}톤</p>}
+                </div>
+              )}
             </div>
           </Popup>
         </Marker>

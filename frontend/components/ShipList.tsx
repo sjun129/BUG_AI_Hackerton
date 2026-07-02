@@ -35,7 +35,8 @@ export default function ShipList({ ships, selectedMmsi, onSelect }: ShipListProp
             <th className="pb-2 pr-2 font-semibold">선박명</th>
             <th className="pb-2 pr-2 font-semibold">상태</th>
             <th className="pb-2 pr-2 font-semibold">속력</th>
-            <th className="pb-2 font-semibold">ETA</th>
+            <th className="pb-2 pr-2 font-semibold">ETA</th>
+            <th className="pb-2 font-semibold">경로 (Port-MIS)</th>
           </tr>
         </thead>
         <tbody>
@@ -80,8 +81,13 @@ export default function ShipList({ ships, selectedMmsi, onSelect }: ShipListProp
                 <td className="py-2.5 pr-2" style={{ color: "#5a6785" }}>
                   {ship.sog}kn
                 </td>
-                <td className="py-2.5" style={{ color: "#5a6785" }}>
+                <td className="py-2.5 pr-2" style={{ color: "#5a6785" }}>
                   {new Date(ship.eta).toLocaleString("ko-KR")}
+                </td>
+                <td className="py-2.5" style={{ color: "#5a6785", fontSize: 12.5 }}>
+                  {ship.previousPort || ship.nextPort
+                    ? `${ship.previousPort ?? "?"} → ${ship.nextPort ?? "?"}`
+                    : "—"}
                 </td>
               </tr>
             );

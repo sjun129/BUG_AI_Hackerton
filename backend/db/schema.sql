@@ -11,8 +11,28 @@ create table if not exists public.ships (
   eta                   timestamptz not null,               -- 입항 예정 시각
   status                text not null check (status in ('underway','anchored','moored')),
   destination_berth_id  text,
+  call_sign             text,                                -- AIS 호출부호 (Port-MIS 매칭 키)
+  -- ↓ Port-MIS(해양수산부_선박운항정보) 입출항 신고 매칭 보강 필드. AIS 10초 폴링 upsert는
+  --   이 컬럼들을 절대 건드리지 않는다(backend/ais/ship-source.ts의 shipToRow 참고) —
+  --   backend/portmis/run-enrich.ts만 별도 update로 채운다.
+  previous_port         text,                                -- 직전 출항항
+  next_port             text,                                -- 다음 기항지
+  berth_name            text,                                -- Port-MIS 신고상 접안/정박 시설명
+  gross_tonnage         double precision,                     -- 총톤수
+  crew_count            int,                                  -- 승무원수
+  agent_company         text,                                 -- 선박관리/대리점 업체명
   updated_at            timestamptz not null default now()
 );
+
+-- 이미 ships 테이블이 있던 프로젝트(테이블 생성이 위 create table 문을 건너뜀)를 위한
+-- 컬럼 추가. 새로 만드는 경우에도 그대로 실행해도 안전하다(멱등).
+alter table public.ships add column if not exists call_sign text;
+alter table public.ships add column if not exists previous_port text;
+alter table public.ships add column if not exists next_port text;
+alter table public.ships add column if not exists berth_name text;
+alter table public.ships add column if not exists gross_tonnage double precision;
+alter table public.ships add column if not exists crew_count int;
+alter table public.ships add column if not exists agent_company text;
 
 -- 기상청 단기예보 스냅샷 (격자 nx,ny × 예보 대상 시각 단위)
 create table if not exists public.weather_forecasts (
