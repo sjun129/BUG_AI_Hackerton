@@ -1,6 +1,6 @@
 import { generateText } from "ai";
 import { advisorModel } from "@/backend/models";
-import { MOCK_SHIPS } from "@/backend/ais/mock-data";
+import { fetchShips } from "@/backend/ais/ship-source";
 import { BUSAN_PORT } from "@/backend/ports/seed-port";
 import { computeCongestionForecast } from "@/backend/prediction/congestion";
 import { buildAdvisorPrompt } from "@/backend/advisor/prompt";
@@ -26,8 +26,9 @@ export async function POST(req: Request) {
       // 본문 없음 — 일반 운영 권고로 처리
     }
 
-    const congestion = computeCongestionForecast(MOCK_SHIPS, BUSAN_PORT);
-    const prompt = buildAdvisorPrompt(MOCK_SHIPS, congestion, userMessage);
+    const ships = await fetchShips();
+    const congestion = computeCongestionForecast(ships, BUSAN_PORT);
+    const prompt = buildAdvisorPrompt(ships, congestion, userMessage);
 
     const { text } = await generateText({ model: advisorModel, prompt });
     const result = parseAdvisorResult(text);

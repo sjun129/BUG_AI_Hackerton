@@ -1,5 +1,8 @@
-import { MOCK_SHIPS } from "@/backend/ais/mock-data";
+import { fetchShips } from "@/backend/ais/ship-source";
+
+export const runtime = "nodejs";
 
 export async function GET() {
-  return Response.json(MOCK_SHIPS);
+  const ships = await fetchShips();
+  return Response.json(ships);
 }
