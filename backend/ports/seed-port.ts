@@ -8,7 +8,10 @@ import type { PortConfig } from "./port-types";
 export const BUSAN_PORT: PortConfig = {
   name: "부산항",
   center: { lat: 35.05, lon: 129.08 },
-  mockAreaRadiusKm: 25,
+  // 부산항은 북항(중심 근처)과 부산신항(중심에서 서쪽 ~27km)이 크게 떨어져 있다.
+  // 이 반경이 AIS 수집 bounding box로도 쓰이므로(backend/ais/busan-filter.ts), 25km면
+  // 부산항 최대 컨테이너 터미널인 신항(PNC/HJNC)이 통째로 빠진다. 두 항을 모두 덮도록 32km.
+  mockAreaRadiusKm: 32,
 
   berths: [
     { id: "berth-1", name: "감만부두 1번 선석", lat: 35.078, lon: 129.081, capacity: 2 },
