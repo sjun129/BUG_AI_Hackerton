@@ -54,6 +54,14 @@ create table if not exists public.port_calls (
   primary key (call_sign, vessel_name)
 );
 
+-- Port-MIS 기반 혼잡도 스냅샷 (시간대별 입항 신고 밀도). run-enrich.ts가 매 실행 시 교체.
+create table if not exists public.port_congestion (
+  bucket_time  timestamptz primary key,               -- 시간대(정시)
+  arrivals     int not null default 0,                -- 해당 시간대 입항 신고 건수
+  level        double precision not null default 0,    -- 0~1 정규화 혼잡도
+  updated_at   timestamptz not null default now()
+);
+
 -- 기상청 단기예보 스냅샷 (격자 nx,ny × 예보 대상 시각 단위)
 create table if not exists public.weather_forecasts (
   nx          int not null,

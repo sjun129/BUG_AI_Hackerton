@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { CSSProperties } from "react";
-import type { CongestionForecast, Ship } from "@/backend/ports/port-types";
+import type { CongestionForecast, PortCall, Ship } from "@/backend/ports/port-types";
 import { BUSAN_PORT } from "@/backend/ports/seed-port";
 import ShipList from "@/frontend/components/ShipList";
 import PortCallList from "@/frontend/components/PortCallList";
@@ -111,6 +111,7 @@ function KpiCard({ label, value, unit, accent, hint, gradient }: KpiProps) {
 export default function DashboardPage() {
   const [ships, setShips] = useState<Ship[]>([]);
   const [congestion, setCongestion] = useState<CongestionForecast | null>(null);
+  const [portCalls, setPortCalls] = useState<PortCall[]>([]);
   const [selectedMmsi, setSelectedMmsi] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -118,18 +119,21 @@ export default function DashboardPage() {
     let active = true;
 
     async function load() {
-      const [shipsRes, congestionRes] = await Promise.all([
+      const [shipsRes, congestionRes, callsRes] = await Promise.all([
         fetch("/api/ships"),
         fetch("/api/congestion"),
+        fetch("/api/port-calls"),
       ]);
       if (!active) return;
       setShips(await shipsRes.json());
       setCongestion(await congestionRes.json());
+      const calls = await callsRes.json();
+      setPortCalls(Array.isArray(calls) ? calls : []);
       setLoading(false);
     }
 
     load();
-    // 30초마다 폴링해 최신 선박·혼잡도를 반영한다(목업이라 값은 고정이어도 갱신 구조는 동일).
+    // 30초마다 폴링해 최신 현황·혼잡도를 반영한다.
     const timer = setInterval(load, 30_000);
     return () => {
       active = false;
@@ -137,8 +141,9 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const underway = ships.filter((s) => s.status === "underway").length;
-  const anchored = ships.filter((s) => s.status === "anchored").length;
+  // 현황 수치는 Port-MIS(전수) 기반. 지도 마커만 AIS(위치 필요).
+  const berthed = portCalls.filter((c) => c.berthType === "접안").length;
+  const anchoredPm = portCalls.filter((c) => c.berthType === "묘박").length;
   const level = congestion?.currentLevel ?? 0;
   const levelPct = Math.round(level * 100);
 
@@ -261,14 +266,9 @@ export default function DashboardPage() {
                 marginBottom: 16,
               }}
             >
-              <KpiCard label="관제 중 선박" value={String(ships.length)} unit="척" hint="AIS 수신 기준" />
-              <KpiCard label="항해 중" value={String(underway)} unit="척" hint="입항 접근 중" />
-              <KpiCard
-                label="묘박 대기"
-                value={String(anchored)}
-                unit="척"
-                hint="접안 대기열"
-              />
+              <KpiCard label="현재 정박 선박" value={String(portCalls.length)} unit="척" hint="Port-MIS 기준" />
+              <KpiCard label="접안" value={String(berthed)} unit="척" hint="부두·선석" />
+              <KpiCard label="묘박" value={String(anchoredPm)} unit="척" hint="박지 대기" />
               <KpiCard
                 label="현재 혼잡도"
                 value={String(levelPct)}
@@ -276,10 +276,10 @@ export default function DashboardPage() {
                 accent={congestionColor(level)}
                 hint={
                   level <= BUSAN_PORT.congestionThresholds.low
-                    ? "원활"
+                    ? "원활 · 입항 신고 기준"
                     : level <= BUSAN_PORT.congestionThresholds.medium
-                      ? "보통"
-                      : "혼잡"
+                      ? "보통 · 입항 신고 기준"
+                      : "혼잡 · 입항 신고 기준"
                 }
               />
             </div>
@@ -318,27 +318,18 @@ export default function DashboardPage() {
                 </section>
 
                 <section style={{ ...card, padding: "18px 22px" }}>
-                  <div style={sectionLabel}>FORECAST</div>
-                  <h2 style={{ margin: "6px 0 14px", fontSize: 18, fontWeight: 800, letterSpacing: "-.02em" }}>
-                    시간대별 혼잡도 예측
+                  <div style={sectionLabel}>FORECAST · PORT-MIS</div>
+                  <h2 style={{ margin: "6px 0 4px", fontSize: 18, fontWeight: 800, letterSpacing: "-.02em" }}>
+                    시간대별 혼잡도 (입항 신고 기준)
                   </h2>
+                  <p style={{ margin: "0 0 12px", fontSize: 12, color: "#8a97b3" }}>
+                    Port-MIS 입항 신고(미래 예정 포함) 시간대별 밀도. 최근 6시간 ~ 향후 18시간.
+                  </p>
                   {congestion && <CongestionChart forecast={congestion} />}
                 </section>
               </div>
 
-              {/* 선박 목록 (AIS 실시간 위치 기반) */}
-              <section style={{ ...card, padding: "18px 22px" }}>
-                <div style={sectionLabel}>FLEET · AIS</div>
-                <h2 style={{ margin: "6px 0 4px", fontSize: 18, fontWeight: 800, letterSpacing: "-.02em" }}>
-                  실시간 선박 (AIS)
-                </h2>
-                <p style={{ margin: "0 0 14px", fontSize: 12.5, color: "#8a97b3" }}>
-                  위치가 잡히는 선박만 표시됩니다. 부산항 전체 입출항은 아래 Port-MIS 현황을 참고하세요.
-                </p>
-                <ShipList ships={ships} selectedMmsi={selectedMmsi} onSelect={setSelectedMmsi} />
-              </section>
-
-              {/* 현재 정박 선박 (Port-MIS 공식·전수) */}
+              {/* 현재 정박 선박 (Port-MIS 공식·전수) — 주 현황 */}
               <section style={{ ...card, padding: "18px 22px" }}>
                 <div style={sectionLabel}>AT BERTH · PORT-MIS</div>
                 <h2 style={{ margin: "6px 0 4px", fontSize: 18, fontWeight: 800, letterSpacing: "-.02em" }}>
@@ -347,7 +338,19 @@ export default function DashboardPage() {
                 <p style={{ margin: "0 0 14px", fontSize: 12.5, color: "#8a97b3" }}>
                   해양수산부 Port-MIS 기준 지금 부산항에 있는 선박 — 부두 접안·박지 묘박을 구분해 표시. 신항 포함, 선석·출발지·톤수.
                 </p>
-                <PortCallList />
+                <PortCallList calls={portCalls} />
+              </section>
+
+              {/* 선박 목록 (AIS 실시간 위치 기반) — 지도 마커와 동일한 subset */}
+              <section style={{ ...card, padding: "18px 22px" }}>
+                <div style={sectionLabel}>FLEET · AIS</div>
+                <h2 style={{ margin: "6px 0 4px", fontSize: 18, fontWeight: 800, letterSpacing: "-.02em" }}>
+                  실시간 위치 선박 (AIS)
+                </h2>
+                <p style={{ margin: "0 0 14px", fontSize: 12.5, color: "#8a97b3" }}>
+                  지도에 표시되는, 위치(위경도)가 잡히는 선박입니다. 부산항 전체 현황은 위 Port-MIS 목록이 기준입니다.
+                </p>
+                <ShipList ships={ships} selectedMmsi={selectedMmsi} onSelect={setSelectedMmsi} />
               </section>
             </div>
           </>

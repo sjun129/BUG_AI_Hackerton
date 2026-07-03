@@ -60,12 +60,14 @@ export interface PortConfig {
   berths: Berth[];
   zones: Zone[];
   congestionThresholds: CongestionThresholds;
-  shipsPerHourCapacity: number; // 시간당 처리 가능 선박 수 (혼잡도 정규화 기준)
+  shipsPerHourCapacity: number; // (AIS 혼잡도) 시간당 처리 가능 선박 수 — 정규화 기준
+  arrivalCapacityPerHour: number; // (Port-MIS 혼잡도) 시간당 입항 신고 처리량 — 정규화 기준
 }
 
 export interface CongestionPoint {
   time: string; // ISO 8601
   level: number; // 0~1
+  arrivals?: number; // 해당 시간대 입항 신고 건수 (Port-MIS 기반일 때)
 }
 
 export interface CongestionForecast {

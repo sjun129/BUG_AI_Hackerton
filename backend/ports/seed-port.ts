@@ -31,6 +31,10 @@ export const BUSAN_PORT: PortConfig = {
   // level = 0.0~0.3 원활, 0.3~0.6 보통, 0.6~1.0 혼잡
   congestionThresholds: { low: 0.3, medium: 0.6 },
 
-  // 시간당 이 척수를 초과해 입항하면 혼잡도 level = 1(포화)로 간주
+  // (AIS 혼잡도) 시간당 이 척수를 초과해 입항하면 혼잡도 level = 1(포화)로 간주
   shipsPerHourCapacity: 4,
+
+  // (Port-MIS 혼잡도) 부산항 전체(북항·신항·감천·다대포) 시간당 입항 신고가 이 건수면 포화(=1).
+  // 실측 분포상 시간당 입항이 1~13건, 평시 5~7건이라 피크가 혼잡으로 뜨도록 12로 둔다.
+  arrivalCapacityPerHour: 12,
 };

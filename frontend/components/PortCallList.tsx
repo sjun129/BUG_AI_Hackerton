@@ -20,25 +20,33 @@ function fmtTime(iso?: string): string {
   });
 }
 
-export default function PortCallList() {
-  const [calls, setCalls] = useState<PortCall[]>([]);
-  const [loading, setLoading] = useState(true);
+interface PortCallListProps {
+  // 대시보드가 이미 받아온 목록을 넘겨주면 그걸 쓴다(KPI와 데이터 공유). 없으면 자체 조회.
+  calls?: PortCall[];
+}
+
+export default function PortCallList({ calls: callsProp }: PortCallListProps) {
+  const [fetched, setFetched] = useState<PortCall[]>([]);
+  const [loading, setLoading] = useState(callsProp === undefined);
   const [filter, setFilter] = useState<Filter>("전체");
 
   useEffect(() => {
+    if (callsProp !== undefined) return; // prop으로 받으면 조회 안 함
     let active = true;
     fetch("/api/port-calls")
       .then((r) => r.json())
       .then((data) => {
         if (!active) return;
-        setCalls(Array.isArray(data) ? data : []);
+        setFetched(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch(() => setLoading(false));
     return () => {
       active = false;
     };
-  }, []);
+  }, [callsProp]);
+
+  const calls = callsProp ?? fetched;
 
   const counts = useMemo(() => {
     let 접안 = 0;
