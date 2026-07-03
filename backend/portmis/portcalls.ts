@@ -33,6 +33,27 @@ export function isCurrentlyInPort(item: PortMisItem): boolean {
   return analyze(item).inPort;
 }
 
+// 하루 단위로 여러 번 조회하면 같은 선박이 여러 item으로 흩어져 온다(입항일 item, 출항일 item
+// 등). (호출부호|선박명)으로 묶어 detail을 모두 합쳐야, 입항·출항 전체를 보고 정박 여부를
+// 정확히 판정할 수 있다.
+export function mergeByVessel(items: PortMisItem[]): PortMisItem[] {
+  const map = new Map<string, PortMisItem>();
+  for (const it of items) {
+    const key = `${it.clsgn}|${it.vsslNm}`;
+    const cur = map.get(key);
+    if (!cur) {
+      map.set(key, { ...it, details: [...it.details] });
+    } else {
+      cur.details.push(...it.details);
+      cur.prvsDpmprtPrtNm ??= it.prvsDpmprtPrtNm;
+      cur.nxlnptPrtNm ??= it.nxlnptPrtNm;
+      cur.vsslKndNm ??= it.vsslKndNm;
+      cur.vsslNltyNm ??= it.vsslNltyNm;
+    }
+  }
+  return [...map.values()];
+}
+
 /** 정박 중인 선박을 PortCall로 변환한다. 대표 detail은 입항 detail(현재 정박 선석·입항시각). */
 export function toPortCall(item: PortMisItem): PortCall {
   const { arrival } = analyze(item);

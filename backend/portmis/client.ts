@@ -123,3 +123,21 @@ export async function fetchBusanPortMisEntries(
 
   return all;
 }
+
+/**
+ * 최근 `days`일을 하루 단위로 조회해 입출항 신고를 모두 모은다.
+ *
+ * 왜 하루씩 쪼개나:
+ *  - 페이지 상한(MAX_PAGES)에 걸려 출항 기록이 잘리면 "이미 떠난 배"를 정박 중으로 오판한다.
+ *    하루치는 건수가 적어 한 번에 다 받으므로 누락이 없다.
+ *  - 입항일로 조회하면 그 배의 (미래) 출항 기록까지 함께 오므로, 며칠~몇 주 전 입항한
+ *    장기 정박선도 그 입항일을 훑는 순간 포착된다 — 짧은 단일 범위 조회로는 놓치는 배들.
+ */
+export async function fetchBusanEntriesByDay(serviceKey: string, days: number): Promise<PortMisItem[]> {
+  const all: PortMisItem[] = [];
+  for (let d = 0; d < days; d++) {
+    const day = new Date(Date.now() - d * 24 * 60 * 60 * 1000);
+    all.push(...(await fetchBusanPortMisEntries(serviceKey, day, day)));
+  }
+  return all;
+}
