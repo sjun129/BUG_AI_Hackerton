@@ -62,10 +62,10 @@ export default function VesselPanel({ calls, selectedKey, onSelect }: VesselPane
       style={{
         position: "absolute",
         top: 16,
-        right: 16,
+        right: 76, // 우측 세로 툴바(레일) 자리를 비운다
         bottom: 16,
         width: 372,
-        maxWidth: "calc(100vw - 32px)",
+        maxWidth: "calc(100vw - 108px)",
         zIndex: 500,
         display: "flex",
         flexDirection: "column",

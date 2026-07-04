@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { CongestionForecast, PortCall, Ship } from "@/backend/ports/port-types";
 import { BUSAN_PORT } from "@/backend/ports/seed-port";
 import VesselPanel from "@/frontend/components/VesselPanel";
 import AdvisorPanel from "@/frontend/components/AdvisorPanel";
+import { BASEMAPS, BASEMAP_STORAGE, initialBasemapId, type Basemap } from "@/frontend/components/basemaps";
 
 // Leaflet은 window에 의존하므로 서버에서 렌더링하면 안 된다.
 const ShipMap = dynamic(() => import("@/frontend/components/ShipMap"), { ssr: false });
@@ -37,12 +38,126 @@ function Metric({ label, value, unit, accent }: { label: string; value: string; 
 
 const RAIL_ICONS = ["🗺️", "🚢", "⚓", "📊", "⚙️"];
 
+// "표시 항목" 카테고리 — 사이트 안에서 화면 오버레이를 켜고 끈다.
+type LayerKey = "vessels" | "congestion" | "legend";
+const LAYER_ITEMS: { key: LayerKey; label: string; icon: string }[] = [
+  { key: "vessels", label: "선박 패널", icon: "🚢" },
+  { key: "congestion", label: "혼잡도", icon: "📊" },
+  { key: "legend", label: "범례", icon: "🎨" },
+];
+const LAYERS_STORAGE = "portiq.layers";
+
+function initialLayers(): Record<LayerKey, boolean> {
+  const def: Record<LayerKey, boolean> = { vessels: true, congestion: true, legend: true };
+  if (typeof window === "undefined") return def;
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(LAYERS_STORAGE) || "null");
+    return saved ? { ...def, ...saved } : def;
+  } catch {
+    return def;
+  }
+}
+
+// 우측 레일 플라이아웃 공용 스타일
+const flyoutHeader: CSSProperties = { padding: "4px 8px 6px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".08em", color: muted };
+const flyoutRow: CSSProperties = {
+  position: "relative",
+  width: "100%",
+  display: "flex",
+  alignItems: "center",
+  gap: 9,
+  padding: "8px 10px",
+  fontSize: 12.5,
+  fontWeight: 700,
+  textAlign: "left",
+  border: "none",
+  borderRadius: 8,
+};
+
+// 우측 세로 툴바의 아이콘 버튼 + 왼쪽으로 열리는 플라이아웃 패널
+function RailButton({
+  icon,
+  label,
+  active,
+  onClick,
+  children,
+}: {
+  icon: string;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={onClick}
+        title={label}
+        style={{
+          width: 40,
+          height: 40,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 18,
+          borderRadius: 10,
+          cursor: "pointer",
+          border: "none",
+          color: active ? "#fff" : muted,
+          background: active ? "linear-gradient(135deg,#2f6bff,#5b8cff)" : "transparent",
+        }}
+      >
+        {icon}
+      </button>
+      {active && (
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 48,
+            width: 184,
+            padding: 6,
+            background: "rgba(11,18,34,0.94)",
+            backdropFilter: "blur(14px)",
+            border,
+            borderRadius: 12,
+            boxShadow: "0 10px 30px rgba(0,0,0,.45)",
+          }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [ships, setShips] = useState<Ship[]>([]);
   const [congestion, setCongestion] = useState<CongestionForecast | null>(null);
   const [portCalls, setPortCalls] = useState<PortCall[]>([]);
   const [selectedMmsi, setSelectedMmsi] = useState<string | null>(null);
   const [selectedVessel, setSelectedVessel] = useState<string | null>(null);
+  const [layers, setLayers] = useState<Record<LayerKey, boolean>>(initialLayers);
+  const [basemapId, setBasemapId] = useState<string>(initialBasemapId);
+  const [openMenu, setOpenMenu] = useState<null | "map" | "layers">(null);
+
+  function toggleLayer(k: LayerKey) {
+    setLayers((prev) => {
+      const next = { ...prev, [k]: !prev[k] };
+      if (typeof window !== "undefined") window.localStorage.setItem(LAYERS_STORAGE, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function selectBasemap(b: Basemap) {
+    if (!b.url) return; // 비활성(설정 필요) 항목은 무시
+    setBasemapId(b.id);
+    setOpenMenu(null);
+    if (typeof window !== "undefined") window.localStorage.setItem(BASEMAP_STORAGE, b.id);
+  }
+
+  const currentBasemap = BASEMAPS.find((b) => b.id === basemapId) ?? BASEMAPS[0];
 
   useEffect(() => {
     let active = true;
@@ -73,7 +188,7 @@ export default function DashboardPage() {
     <div style={{ position: "fixed", inset: 0, background: "#070c17", overflow: "hidden", fontFamily: "Pretendard, system-ui, sans-serif" }}>
       {/* 배경 지도 */}
       <div style={{ position: "absolute", inset: 0 }}>
-        <ShipMap ships={ships} selectedMmsi={selectedMmsi} onSelect={setSelectedMmsi} portCalls={portCalls} />
+        <ShipMap ships={ships} selectedMmsi={selectedMmsi} onSelect={setSelectedMmsi} portCalls={portCalls} basemapId={basemapId} />
       </div>
       {/* 다크 무드 틴트 (지도 클릭 방해 안 함) */}
       <div
@@ -144,6 +259,85 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* 우측 세로 툴바 — 지도 타입 / 표시 항목 카테고리 (레퍼런스 스타일, 왼쪽으로 펼침) */}
+      <div
+        style={{
+          position: "absolute",
+          top: 16,
+          right: 16,
+          zIndex: 600,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          padding: "8px 6px",
+          background: panel,
+          backdropFilter: "blur(14px)",
+          border,
+          borderRadius: 14,
+        }}
+      >
+        {/* 지도 타입 */}
+        <RailButton
+          icon={currentBasemap.icon}
+          label="지도 타입"
+          active={openMenu === "map"}
+          onClick={() => setOpenMenu((v) => (v === "map" ? null : "map"))}
+        >
+          <div style={flyoutHeader}>지도 타입</div>
+          {BASEMAPS.map((b) => {
+            const on = b.id === currentBasemap.id;
+            const disabled = !b.url;
+            return (
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => selectBasemap(b)}
+                disabled={disabled}
+                title={disabled ? b.note : `배경: ${b.label}`}
+                style={{
+                  ...flyoutRow,
+                  color: disabled ? "#5a6b8c" : on ? "#fff" : "#c7d3ea",
+                  background: on ? "rgba(56,120,255,.16)" : "transparent",
+                  cursor: disabled ? "not-allowed" : "pointer",
+                  marginTop: b.id === "enc" ? 6 : 0,
+                  borderTop: b.id === "enc" ? "1px solid rgba(255,255,255,.08)" : "none",
+                  paddingTop: b.id === "enc" ? 12 : 8,
+                }}
+              >
+                <span style={{ fontSize: 14, width: 16, textAlign: "center", opacity: disabled ? 0.5 : 1 }}>{b.icon}</span>
+                <span style={{ flex: 1 }}>{b.label}</span>
+                {on && <span style={{ position: "absolute", right: 4, top: 8, bottom: 8, width: 3, borderRadius: 2, background: "#3b82f6" }} />}
+              </button>
+            );
+          })}
+        </RailButton>
+
+        {/* 표시 항목 */}
+        <RailButton
+          icon="🧭"
+          label="표시 항목"
+          active={openMenu === "layers"}
+          onClick={() => setOpenMenu((v) => (v === "layers" ? null : "layers"))}
+        >
+          <div style={flyoutHeader}>표시 항목</div>
+          {LAYER_ITEMS.map((item) => {
+            const on = layers[item.key];
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => toggleLayer(item.key)}
+                style={{ ...flyoutRow, color: on ? "#fff" : "#8aa0c8", background: on ? "rgba(56,120,255,.16)" : "transparent", cursor: "pointer" }}
+              >
+                <span style={{ fontSize: 14, width: 16, textAlign: "center" }}>{item.icon}</span>
+                <span style={{ flex: 1 }}>{item.label}</span>
+                <span style={{ fontSize: 12, color: on ? "#3b82f6" : "rgba(255,255,255,.2)" }}>{on ? "✓" : ""}</span>
+              </button>
+            );
+          })}
+        </RailButton>
+      </div>
+
       {/* 상단 텔레메트리 바 (항만 종합 현황) */}
       <div
         style={{
@@ -177,11 +371,12 @@ export default function DashboardPage() {
       </div>
 
       {/* 범례 */}
+      {layers.legend && (
       <div
         style={{
           position: "absolute",
           top: 16,
-          right: 404,
+          right: 464,
           zIndex: 500,
           padding: "10px 14px",
           background: panel,
@@ -205,12 +400,13 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+      )}
 
       {/* 우측 선박 패널 */}
-      <VesselPanel calls={portCalls} selectedKey={selectedVessel} onSelect={setSelectedVessel} />
+      {layers.vessels && <VesselPanel calls={portCalls} selectedKey={selectedVessel} onSelect={setSelectedVessel} />}
 
       {/* 좌하단 혼잡도 미니 패널 (인라인 막대) */}
-      {congestion && (
+      {layers.congestion && congestion && (
         <div
           style={{
             position: "absolute",

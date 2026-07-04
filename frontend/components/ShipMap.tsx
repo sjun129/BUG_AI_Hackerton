@@ -5,6 +5,7 @@ import { MapContainer, Marker, Popup, TileLayer, Tooltip } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import type { BerthArea, PortCall, Ship } from "@/backend/ports/port-types";
 import { BUSAN_PORT } from "@/backend/ports/seed-port";
+import { BASEMAPS } from "./basemaps";
 
 const STATUS_COLOR: Record<Ship["status"], string> = {
   underway: "#38bdf8",
@@ -59,43 +60,12 @@ interface ShipMapProps {
   selectedMmsi: string | null;
   onSelect: (mmsi: string) => void;
   portCalls?: PortCall[]; // Port-MIS 정박선 — 부두별로 집계해 지도에 표시
+  basemapId: string; // 배경 지도 선택값(대시보드 우측 레일에서 제어)
 }
 
-// 지도 배경 타일 — 우선순위: (1) 직접 지정한 타일 URL, (2) VWorld 키, (3) OSM 기본.
-// 타일은 브라우저가 직접 받으므로 키가 든 URL도 NEXT_PUBLIC_ 으로 노출된다(타일 서비스의 정상 동작).
-//   NEXT_PUBLIC_VWORLD_KEY   — vworld.kr 발급 키
-//   NEXT_PUBLIC_VWORLD_LAYER — Satellite(위성,기본) | Base(일반) | gray | midnight(야간) | Hybrid
-const VWORLD_KEY = process.env.NEXT_PUBLIC_VWORLD_KEY;
-const VWORLD_LAYER = process.env.NEXT_PUBLIC_VWORLD_LAYER || "Satellite";
+export default function ShipMap({ ships, selectedMmsi, onSelect, portCalls = [], basemapId }: ShipMapProps) {
+  const basemap = BASEMAPS.find((b) => b.id === basemapId) ?? BASEMAPS[0];
 
-function resolveTiles(): { url: string; attribution: string; hybrid?: string } {
-  if (process.env.NEXT_PUBLIC_MAP_TILE_URL) {
-    return {
-      url: process.env.NEXT_PUBLIC_MAP_TILE_URL,
-      attribution: process.env.NEXT_PUBLIC_MAP_TILE_ATTRIBUTION || "",
-    };
-  }
-  if (VWORLD_KEY) {
-    const ext = VWORLD_LAYER === "Satellite" ? "jpeg" : "png";
-    return {
-      url: `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_KEY}/${VWORLD_LAYER}/{z}/{y}/{x}.${ext}`,
-      attribution: '&copy; <a href="https://www.vworld.kr">VWorld</a> · 국토교통부',
-      // 위성 지도엔 지명·도로 라벨이 없어, Hybrid 레이어를 위에 겹쳐 라벨을 표시한다.
-      hybrid:
-        VWORLD_LAYER === "Satellite"
-          ? `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_KEY}/Hybrid/{z}/{y}/{x}.png`
-          : undefined,
-    };
-  }
-  return {
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  };
-}
-
-const TILES = resolveTiles();
-
-export default function ShipMap({ ships, selectedMmsi, onSelect, portCalls = [] }: ShipMapProps) {
   // 부두별 접안/묘박 척수 집계
   const areaStats = BUSAN_PORT.berthAreas
     .map((area) => {
@@ -107,15 +77,17 @@ export default function ShipMap({ ships, selectedMmsi, onSelect, portCalls = [] 
     .filter((s) => s.total > 0);
 
   return (
-    <MapContainer
-      center={[BUSAN_PORT.center.lat, BUSAN_PORT.center.lon]}
-      zoom={11}
-      zoomControl={false}
-      className="h-full w-full"
-    >
-      <TileLayer attribution={TILES.attribution} url={TILES.url} />
-      {/* 위성 배경일 때 지명·도로 라벨 오버레이 */}
-      {TILES.hybrid && <TileLayer url={TILES.hybrid} />}
+    <div className="relative h-full w-full">
+      <MapContainer
+        center={[BUSAN_PORT.center.lat, BUSAN_PORT.center.lon]}
+        zoom={11}
+        zoomControl={false}
+        className="h-full w-full"
+      >
+        {/* key로 배경 전환 시 타일 레이어를 확실히 교체한다 */}
+        {basemap.url && <TileLayer key={basemap.id} attribution={basemap.attribution} url={basemap.url} />}
+        {/* 위성 배경일 때 지명·도로 라벨 오버레이 */}
+        {basemap.hybrid && <TileLayer key={`${basemap.id}-hybrid`} url={basemap.hybrid} />}
 
       {/* 부두별 정박선 집계 마커 (Port-MIS 기반) */}
       {areaStats.map(({ area, berthed, anchored, total }) => (
@@ -164,6 +136,7 @@ export default function ShipMap({ ships, selectedMmsi, onSelect, portCalls = [] 
           </Popup>
         </Marker>
       ))}
-    </MapContainer>
+      </MapContainer>
+    </div>
   );
 }
