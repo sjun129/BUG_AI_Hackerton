@@ -3,7 +3,7 @@
 import L from "leaflet";
 import { Circle, MapContainer, Marker, Popup, TileLayer, Tooltip } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Ship } from "@/backend/ports/port-types";
+import type { BerthArea, PortCall, Ship } from "@/backend/ports/port-types";
 import { BUSAN_PORT } from "@/backend/ports/seed-port";
 
 const STATUS_COLOR: Record<Ship["status"], string> = {
@@ -46,15 +46,42 @@ function shipIcon(ship: Ship, selected: boolean): L.DivIcon {
   });
 }
 
+// 부두별 정박선 수를 나타내는 라벨 버블(divIcon). 숫자가 클수록 크고 진하게.
+function berthAreaIcon(area: BerthArea, berthed: number, anchored: number): L.DivIcon {
+  const total = berthed + anchored;
+  const size = Math.min(56, 26 + total * 1.6);
+  const color = anchored > berthed ? "#e8952b" : "#2f6bff"; // 묘박 우세면 주황, 접안 우세면 파랑
+  const html = `
+    <div style="display:flex;flex-direction:column;align-items:center;transform:translateY(-2px)">
+      <div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};color:#fff;
+        display:flex;align-items:center;justify-content:center;font-weight:800;font-size:${Math.max(12, size / 3)}px;
+        border:2px solid #fff;box-shadow:0 4px 12px rgba(20,40,90,.35)">${total}</div>
+      <div style="margin-top:2px;font-size:10.5px;font-weight:700;color:#0a1830;background:rgba(255,255,255,.85);
+        padding:1px 6px;border-radius:6px;white-space:nowrap">${area.name}</div>
+    </div>`;
+  return L.divIcon({ html, className: "berth-area-marker", iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
+}
+
 interface ShipMapProps {
   ships: Ship[];
   selectedMmsi: string | null;
   onSelect: (mmsi: string) => void;
   currentLevel: number; // 혼잡도 0~1 — 구역 오버레이 색상에 사용
+  portCalls?: PortCall[]; // Port-MIS 정박선 — 부두별로 집계해 지도에 표시
 }
 
-export default function ShipMap({ ships, selectedMmsi, onSelect, currentLevel }: ShipMapProps) {
+export default function ShipMap({ ships, selectedMmsi, onSelect, currentLevel, portCalls = [] }: ShipMapProps) {
   const zoneColor = congestionColor(currentLevel);
+
+  // 부두별 접안/묘박 척수 집계
+  const areaStats = BUSAN_PORT.berthAreas
+    .map((area) => {
+      const calls = portCalls.filter((c) => c.berthAreaId === area.id);
+      const berthed = calls.filter((c) => c.berthType === "접안").length;
+      const anchored = calls.filter((c) => c.berthType === "묘박").length;
+      return { area, berthed, anchored, total: berthed + anchored };
+    })
+    .filter((s) => s.total > 0);
 
   return (
     <MapContainer
@@ -77,6 +104,19 @@ export default function ShipMap({ ships, selectedMmsi, onSelect, currentLevel }:
         >
           <Tooltip>{zone.name}</Tooltip>
         </Circle>
+      ))}
+
+      {/* 부두별 정박선 집계 마커 (Port-MIS 기반) */}
+      {areaStats.map(({ area, berthed, anchored, total }) => (
+        <Marker key={area.id} position={[area.lat, area.lon]} icon={berthAreaIcon(area, berthed, anchored)}>
+          <Popup>
+            <div className="text-sm">
+              <p className="font-medium">{area.name}</p>
+              <p>정박 {total}척</p>
+              <p>접안 {berthed} · 묘박 {anchored}</p>
+            </div>
+          </Popup>
+        </Marker>
       ))}
 
       {ships.map((ship) => (

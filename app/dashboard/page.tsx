@@ -303,6 +303,7 @@ export default function DashboardPage() {
                     selectedMmsi={selectedMmsi}
                     onSelect={setSelectedMmsi}
                     currentLevel={level}
+                    portCalls={portCalls}
                   />
                 </div>
               </section>

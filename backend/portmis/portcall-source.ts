@@ -3,7 +3,9 @@
 
 import type { PortCall, PortCallEvent } from "../ports/port-types";
 import { getSupabase } from "../db/supabase";
+import { BUSAN_PORT } from "../ports/seed-port";
 import { classifyBerth } from "./portcalls";
+import { resolveBerthArea } from "./berth-areas";
 
 interface PortCallRow {
   call_sign: string;
@@ -43,7 +45,15 @@ function rowToPortCall(r: PortCallRow): PortCall {
     ...(r.previous_port ? { previousPort: r.previous_port } : {}),
     ...(r.next_port ? { nextPort: r.next_port } : {}),
     ...(r.event_time ? { eventTime: new Date(r.event_time).toISOString() } : {}),
-    ...(r.berth_name ? { berthName: r.berth_name, berthType: classifyBerth(r.berth_name) } : {}),
+    ...(r.berth_name
+      ? {
+          berthName: r.berth_name,
+          berthType: classifyBerth(r.berth_name),
+          ...(resolveBerthArea(r.berth_name, BUSAN_PORT)?.id
+            ? { berthAreaId: resolveBerthArea(r.berth_name, BUSAN_PORT)!.id }
+            : {}),
+        }
+      : {}),
     ...(r.gross_tonnage != null ? { grossTonnage: r.gross_tonnage } : {}),
   };
 }

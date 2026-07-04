@@ -28,6 +28,22 @@ export const BUSAN_PORT: PortConfig = {
     { id: "zone-port-limit", name: "항계", center: { lat: 35.05, lon: 129.08 }, radiusKm: 15 },
   ],
 
+  // 부두별 대표 좌표(근사). Port-MIS 선석명을 keyword로 이 부두에 매칭한다.
+  // keyword 순서/우선순위: 구체적인 구역명(감천·신항 등)이 먼저 걸리도록 배열 앞쪽에 둔다.
+  berthAreas: [
+    { id: "sinhang", name: "부산신항", lat: 35.081, lon: 128.79, keywords: ["신항"] },
+    { id: "gamcheon", name: "감천항", lat: 35.075, lon: 129.01, keywords: ["감천", "5물량장", "선기조합", "강남조선", "동일 조선", "서방파제", "구평"] },
+    { id: "dadaepo", name: "다대포항", lat: 35.045, lon: 128.968, keywords: ["다대"] },
+    { id: "sinseondae", name: "신선대부두", lat: 35.065, lon: 129.083, keywords: ["신선대", "7부두 7"] },
+    { id: "gamman", name: "감만부두", lat: 35.078, lon: 129.079, keywords: ["감만"] },
+    { id: "uam", name: "우암·동명부두", lat: 35.093, lon: 129.066, keywords: ["우암", "동명"] },
+    { id: "bukhang", name: "북항(재래·자성대)", lat: 35.106, lon: 129.043, keywords: ["자성대", "중앙부두", "국제여객", "북항크루즈", "관공선", "연합부두", "소형선부두", "북항사설조선소"] },
+    { id: "yeongdo", name: "영도(봉래·청학·조선소)", lat: 35.088, lon: 129.045, keywords: ["영도", "대평동", "봉래동", "청학", "부산조선안벽", "선진", "삼한안벽", "미원안벽", "한진"] },
+    { id: "namhang", name: "남항(자갈치·대교동)", lat: 35.093, lon: 129.028, keywords: ["남항", "대교동", "연안유람선", "자갈치", "충무", "남부민"] },
+    { id: "yongho", name: "용호부두", lat: 35.115, lon: 129.108, keywords: ["용호"] },
+    { id: "anchorage", name: "남외항 묘박지", lat: 35.0, lon: 129.03, keywords: ["남외항", "박지", "정박지", "묘지"] },
+  ],
+
   // level = 0.0~0.3 원활, 0.3~0.6 보통, 0.6~1.0 혼잡
   congestionThresholds: { low: 0.3, medium: 0.6 },
 

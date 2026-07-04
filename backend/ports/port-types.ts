@@ -47,6 +47,16 @@ export interface Zone {
   radiusKm: number;
 }
 
+// 부두/구역 — Port-MIS 선석명(예: "감천 4부두 5선석")엔 좌표가 없어, 선석명의 키워드로
+// 이 목록의 부두에 매칭해 지도상 위치를 준다. 좌표는 부두 단위 대표점(근사).
+export interface BerthArea {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  keywords: string[]; // 선석명에 이 중 하나라도 포함되면 이 부두로 분류
+}
+
 // 혼잡도 레벨(0~1)을 사람이 읽을 수 있는 단계로 나누는 경계값
 export interface CongestionThresholds {
   low: number; // level <= low: 원활
@@ -59,6 +69,7 @@ export interface PortConfig {
   mockAreaRadiusKm: number; // 목업 선박을 이 반경 내에 생성
   berths: Berth[];
   zones: Zone[];
+  berthAreas: BerthArea[]; // 부두별 위치(선석명 분류용)
   congestionThresholds: CongestionThresholds;
   shipsPerHourCapacity: number; // (AIS 혼잡도) 시간당 처리 가능 선박 수 — 정규화 기준
   arrivalCapacityPerHour: number; // (Port-MIS 혼잡도) 시간당 입항 신고 처리량 — 정규화 기준
@@ -108,5 +119,6 @@ export interface PortCall {
   eventTime?: string; // ISO 8601 — 해당 신고 시각
   berthName?: string; // 접안/정박 시설명
   berthType?: BerthType; // 접안 | 묘박 (berthName에서 파생)
+  berthAreaId?: string; // 매칭된 부두(BerthArea) id — 지도 분류용 (berthName에서 파생)
   grossTonnage?: number; // 총톤수
 }

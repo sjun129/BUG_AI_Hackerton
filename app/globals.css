@@ -39,6 +39,12 @@ body {
   border: none;
 }
 
+/* 부두별 정박선 집계 버블 — divIcon 기본 배경/테두리 제거 */
+.berth-area-marker {
+  background: transparent;
+  border: none;
+}
+
 /* ── PORTIQ 랜딩 (PORTIQ Landing.dc.html 이식) ── */
 @keyframes portiq-floaty {
   0%, 100% { transform: translateY(0); }
