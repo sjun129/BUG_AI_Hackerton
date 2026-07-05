@@ -1,0 +1,38 @@
+{
+  "name": "busan-port-ai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "ingest:ais": "tsx --env-file=.env.local backend/ais/ingest-aisstream.ts",
+    "enrich:portmis": "tsx --env-file=.env.local backend/portmis/run-enrich.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^4.0.0",
+    "@supabase/supabase-js": "^2.110.0",
+    "ai": "^7.0.2",
+    "fast-xml-parser": "^4.5.0",
+    "leaflet": "^1.9.4",
+    "next": "^15.1.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-leaflet": "^5.0.0",
+    "recharts": "^2.15.0",
+    "ws": "^8.18.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/leaflet": "^1.9.12",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/ws": "^8.5.13",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5"
+  }
+}
