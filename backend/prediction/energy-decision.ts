@@ -1,4 +1,4 @@
-import type { CongestionForecast, CongestionPoint, PortCall, PortConfig, Ship } from "../ports/port-types";
+import type { CongestionForecast, CongestionPoint, PortCall, PortConfig, ShipStatus } from "../ports/port-types";
 import { BUSAN_PORT } from "../ports/seed-port";
 import { haversineDistanceKm } from "./eta";
 import {
@@ -23,17 +23,39 @@ const MS_PER_HOUR = 60 * 60 * 1000;
 const DEFAULT_MIN_SPEED_KN = 8;
 const MIN_SOG_KN = 3;
 const MIN_DISTANCE_NM = 10;
+const SIMULATION_MIN_DISTANCE_NM = 1;
 const MAX_DISTANCE_NM = 600;
 
-export type CongestionBasis = "eta-forecast-bucket" | "current-level-fallback";
+export type CongestionBasis = "eta-forecast-bucket" | "current-level-fallback" | "dashboard-current-level";
 export type CurrentInPortBasis = "actual-port-calls" | "level-times-p99" | "unknown";
+export type EnergyDecisionCongestionMode = "dashboard-current" | "eta-forecast";
+
+export interface EnergyDecisionShipInput {
+  id?: string;
+  mmsi?: string;
+  name: string;
+  lat: number;
+  lon: number;
+  sog: number;
+  cog?: number;
+  eta?: string;
+  status: ShipStatus;
+  callSign?: string;
+  imo?: string;
+  grossTonnage?: number;
+  vesselType?: string;
+  source?: "simulation";
+  isSimulated?: boolean;
+}
 
 export interface ComputeEnergyDecisionsInput {
-  ships: Ship[];
+  ships: EnergyDecisionShipInput[];
   congestion: CongestionForecast;
   portCalls?: PortCall[];
   portConfig?: PortConfig;
   now?: Date;
+  mode?: "simulation";
+  congestionMode?: EnergyDecisionCongestionMode;
 }
 
 export interface EnergyDecision {
@@ -42,6 +64,8 @@ export interface EnergyDecision {
   callSign?: string;
   mmsi?: string;
   imo?: string;
+  source?: "simulation";
+  isSimulated?: boolean;
 
   status: "underway";
   distanceNm: number;
@@ -115,7 +139,8 @@ export type EmptyReasonCode =
   | "NO_UNDERWAY_CANDIDATES"
   | "STALE_FORECAST_LOW_FALLBACK_CONGESTION"
   | "LOW_CONGESTION_OR_NO_WAIT"
-  | "NO_EFFECTIVE_SPEED_REDUCTION";
+  | "NO_EFFECTIVE_SPEED_REDUCTION"
+  | "SIMULATION_DASHBOARD_CURRENT_NO_RECOMMENDATION";
 
 export interface EmptyReason {
   code: EmptyReasonCode;
@@ -126,10 +151,21 @@ export interface EmptyReason {
 
 export interface EnergyDecisionResult {
   source: "deterministic-jit";
+  mode?: "simulation";
+  congestionMode?: EnergyDecisionCongestionMode;
   isFallback: boolean;
-  basis: "jit-arrival-energy-decision";
+  basis:
+    | "jit-arrival-energy-decision"
+    | "jit-arrival-simulation"
+    | "jit-arrival-simulation-dashboard-current-congestion";
   lastUpdated: string;
   dataSources: string[];
+  dashboardCongestion?: {
+    level: number;
+    status: CongestionWaitingStatus;
+    source?: string;
+    basis?: string;
+  };
   forecastFreshness: ForecastFreshness;
   decisions: EnergyDecision[];
   summary: EnergyDecisionSummary;
@@ -219,7 +255,7 @@ function levelStatus(level: number): CongestionWaitingStatus {
   return estimateWaitingMinutesByCongestion(level).status;
 }
 
-function findPortCall(ship: Ship, portCalls: PortCall[]): PortCall | undefined {
+function findPortCall(ship: EnergyDecisionShipInput, portCalls: PortCall[]): PortCall | undefined {
   const shipCallSign = ship.callSign?.trim().toUpperCase();
   if (shipCallSign) {
     const byCallSign = portCalls.find((call) => call.callSign?.trim().toUpperCase() === shipCallSign);
@@ -231,7 +267,28 @@ function findPortCall(ship: Ship, portCalls: PortCall[]): PortCall | undefined {
   return portCalls.find((call) => normalizeShipName(call.vesselName) === shipName);
 }
 
-function enrichShip(ship: Ship, portCalls: PortCall[]): EnrichedShip {
+function isSimulatedShip(ship: EnergyDecisionShipInput): boolean {
+  return ship.source === "simulation" || ship.isSimulated === true;
+}
+
+function enrichShip(ship: EnergyDecisionShipInput, portCalls: PortCall[]): EnrichedShip {
+  if (isSimulatedShip(ship)) {
+    const vesselType = ship.vesselType;
+    const grossTonnage = ship.grossTonnage;
+    const normalizedVesselType = normalizeVesselType(vesselType);
+    const waitingFuel = getWaitingFuelKgPerHour({ grossTonnage, vesselType });
+
+    return {
+      ...(vesselType ? { vesselType } : {}),
+      ...(grossTonnage != null ? { grossTonnage } : {}),
+      ...(ship.imo ? { imo: ship.imo } : {}),
+      ...(ship.callSign ? { callSign: ship.callSign } : {}),
+      sizeClass: waitingFuel.sizeClass,
+      normalizedVesselType,
+      matchBasis: "simulation-input",
+    };
+  }
+
   const spec =
     findVesselSpecByMmsi(ship.mmsi) ??
     findVesselSpecByImo(ship.imo) ??
@@ -285,7 +342,7 @@ function confidence(params: {
   currentInPortBasis: CurrentInPortBasis;
 }): Confidence {
   let score = 0;
-  if (params.congestionBasis === "eta-forecast-bucket") score += 2;
+  if (params.congestionBasis === "eta-forecast-bucket" || params.congestionBasis === "dashboard-current-level") score += 2;
   if (params.grossTonnage != null) score += 1;
   if (params.vesselType) score += 1;
   if (params.fuelConfidence === "high") score += 2;
@@ -297,7 +354,11 @@ function confidence(params: {
   return "low";
 }
 
-function buildEmptyReason(summary: EnergyDecisionSummary, freshness: ForecastFreshness): EmptyReason | undefined {
+function buildEmptyReason(
+  summary: EnergyDecisionSummary,
+  freshness: ForecastFreshness,
+  context?: { simulationDashboardCurrent?: boolean; currentLevel?: number }
+): EmptyReason | undefined {
   if (summary.recommendedCount > 0) return undefined;
 
   if (summary.candidateCount === 0) {
@@ -308,6 +369,20 @@ function buildEmptyReason(summary: EnergyDecisionSummary, freshness: ForecastFre
       suggestions: [
         "AIS 선박 위치와 속도 데이터가 최신인지 확인하세요.",
         "부산항 중심 기준 10~600해리 범위의 항해 중 선박이 있는지 확인하세요.",
+      ],
+    };
+  }
+
+  if (context?.simulationDashboardCurrent) {
+    const levelText = context.currentLevel != null ? `${Math.round(context.currentLevel * 100)}%` : "현재";
+    return {
+      code: "SIMULATION_DASHBOARD_CURRENT_NO_RECOMMENDATION",
+      title: "현재 생성된 가상 선박 기준으로 JIT 감속 권고가 없습니다.",
+      description: `현재 대시보드 혼잡도 ${levelText} 기준으로는 해당 가상 선박의 감속 권고 효과가 크지 않습니다.`,
+      suggestions: [
+        "현재 혼잡도가 낮으면 감속 권고가 표시되지 않을 수 있습니다.",
+        "가상 선박 속도가 이미 낮거나 부산항과 너무 가까우면 감속 효과가 제한적일 수 있습니다.",
+        "계산된 권고 속도가 현재 속도보다 낮지 않으면 권고에서 제외됩니다.",
       ],
     };
   }
@@ -353,6 +428,9 @@ export function computeEnergyDecisions(input: ComputeEnergyDecisionsInput): Ener
   const portConfig = input.portConfig ?? BUSAN_PORT;
   const now = input.now ?? new Date();
   const portCalls = input.portCalls ?? [];
+  const simulationMode = input.mode === "simulation";
+  const congestionMode: EnergyDecisionCongestionMode = input.congestionMode ?? (simulationMode ? "dashboard-current" : "eta-forecast");
+  const useDashboardCurrent = simulationMode && congestionMode === "dashboard-current";
   const inPort = currentInPort(input.congestion, portCalls, portConfig);
   const decisions: EnergyDecision[] = [];
   let candidateCount = 0;
@@ -367,17 +445,23 @@ export function computeEnergyDecisions(input: ComputeEnergyDecisionsInput): Ener
     if (ship.status !== "underway" || ship.sog < MIN_SOG_KN) continue;
 
     const distanceNm = haversineDistanceKm({ lat: ship.lat, lon: ship.lon }, portConfig.center) * KM_TO_NM;
-    if (distanceNm < MIN_DISTANCE_NM || distanceNm > MAX_DISTANCE_NM) continue;
+    const simulated = isSimulatedShip(ship) || simulationMode;
+    const minDistanceNm = simulated ? SIMULATION_MIN_DISTANCE_NM : MIN_DISTANCE_NM;
+    if (distanceNm < minDistanceNm || distanceNm > MAX_DISTANCE_NM) continue;
     candidateCount += 1;
 
     const currentSpeedKn = Math.max(0.1, ship.sog);
     const currentTravelHours = distanceNm / currentSpeedKn;
     const currentEtaDate = addHours(now, currentTravelHours);
-    const currentBucket = findForecastBucket(input.congestion.forecast, currentEtaDate);
-    const congestionBasis: CongestionBasis = currentBucket ? "eta-forecast-bucket" : "current-level-fallback";
+    const currentBucket = useDashboardCurrent ? undefined : findForecastBucket(input.congestion.forecast, currentEtaDate);
+    const congestionBasis: CongestionBasis = useDashboardCurrent
+      ? "dashboard-current-level"
+      : currentBucket
+        ? "eta-forecast-bucket"
+        : "current-level-fallback";
     if (currentBucket) etaForecastMatchedCount += 1;
-    else currentLevelFallbackCount += 1;
-    const currentCongestionLevel = currentBucket?.level ?? input.congestion.currentLevel ?? 0;
+    else if (!useDashboardCurrent) currentLevelFallbackCount += 1;
+    const currentCongestionLevel = useDashboardCurrent ? input.congestion.currentLevel ?? 0 : currentBucket?.level ?? input.congestion.currentLevel ?? 0;
     const currentWait = estimateWaitingMinutesByCongestion(currentCongestionLevel);
 
     if (currentWait.status === "원활") {
@@ -409,8 +493,8 @@ export function computeEnergyDecisions(input: ComputeEnergyDecisionsInput): Ener
     }
 
     const recommendedEtaDate = addHours(now, recommendedTravelHours);
-    const recommendedBucket = findForecastBucket(input.congestion.forecast, recommendedEtaDate);
-    const recommendedCongestionLevel = recommendedBucket?.level ?? currentCongestionLevel;
+    const recommendedBucket = useDashboardCurrent ? undefined : findForecastBucket(input.congestion.forecast, recommendedEtaDate);
+    const recommendedCongestionLevel = useDashboardCurrent ? currentCongestionLevel : recommendedBucket?.level ?? currentCongestionLevel;
     const recommendedCongestionStatus = levelStatus(recommendedCongestionLevel);
 
     const enriched = enrichShip(ship, portCalls);
@@ -428,27 +512,37 @@ export function computeEnergyDecisions(input: ComputeEnergyDecisionsInput): Ener
     if (estimatedFuelSavedKg <= 0 || estimatedCo2ReducedKg <= 0) continue;
 
     const reasons = [
-      congestionBasis === "eta-forecast-bucket"
+      congestionBasis === "dashboard-current-level"
+        ? `대시보드 현재 Port-MIS 혼잡도 ${round(currentCongestionLevel, 2)} 사용`
+        : congestionBasis === "eta-forecast-bucket"
         ? `ETA 시간대 forecast bucket(${bucketStart(currentEtaDate)}) 혼잡도 ${round(currentCongestionLevel, 2)} 사용`
         : `ETA 시간대 forecast bucket 없음, currentLevel ${round(currentCongestionLevel, 2)} 사용`,
       `JIT 속도 ${round(recommendedSpeedKn, 1)}kn로 ${Math.round(reducedWaitingMinutes)}분 대기 흡수`,
-      `선박 제원 매칭 기준: ${enriched.matchBasis}`,
+      isSimulatedShip(ship) ? "가상 선박 입력값 기준으로 선종·총톤수 사용" : `선박 제원 매칭 기준: ${enriched.matchBasis}`,
       fuelInference.reason,
     ];
+    if (simulated && distanceNm < MIN_DISTANCE_NM) {
+      reasons.push("부산항과 가까운 위치라 JIT 감속 효과가 제한적일 수 있습니다.");
+    }
 
     const calculationBasis = [
       "JIT 정시도착: v = distanceNm / (distanceNm / currentSpeedKn + waitingHours)",
-      "ETA가 포함된 Port-MIS congestion forecast bucket 우선 사용",
+      useDashboardCurrent
+        ? "dashboard current Port-MIS congestion level"
+        : "ETA가 포함된 Port-MIS congestion forecast bucket 우선 사용",
       "대기 연료 소모율: backend/data/energy getWaitingFuelKgPerHour()",
       "CO2 감축량 kg = 절감 연료 kg * cfTco2PerTon",
     ];
 
+    const shipId = isSimulatedShip(ship) ? ship.id ?? ship.mmsi : ship.mmsi;
+
     decisions.push({
-      shipId: ship.mmsi,
+      ...(shipId ? { shipId } : {}),
       shipName: ship.name,
       ...(enriched.callSign ? { callSign: enriched.callSign } : {}),
-      mmsi: ship.mmsi,
+      ...(ship.mmsi ? { mmsi: ship.mmsi } : {}),
       ...(enriched.imo ? { imo: enriched.imo } : {}),
+      ...(isSimulatedShip(ship) ? { source: "simulation", isSimulated: true } : {}),
       status: "underway",
       distanceNm: round(distanceNm, 1),
       currentSpeedKn: round(currentSpeedKn, 1),
@@ -523,29 +617,65 @@ export function computeEnergyDecisions(input: ComputeEnergyDecisionsInput): Ener
       totalEstimatedCo2ReducedKg: 0,
     }
   );
-  const forecastFreshness = buildForecastFreshness({
-    forecast: input.congestion.forecast,
-    now,
-    matchedEtaBucketCount: etaForecastMatchedCount,
-    fallbackCount: currentLevelFallbackCount,
+  const forecastFreshness: ForecastFreshness = useDashboardCurrent
+    ? {
+        ...forecastWindow(input.congestion.forecast),
+        isStale: false,
+        now: now.toISOString(),
+        matchedEtaBucketCount: 0,
+        fallbackCount: 0,
+        reason: "시뮬레이션은 대시보드 현재 Port-MIS 혼잡도 currentLevel 기준으로 계산했습니다.",
+      }
+    : buildForecastFreshness({
+        forecast: input.congestion.forecast,
+        now,
+        matchedEtaBucketCount: etaForecastMatchedCount,
+        fallbackCount: currentLevelFallbackCount,
+      });
+  const emptyReason = buildEmptyReason(summary, forecastFreshness, {
+    simulationDashboardCurrent: useDashboardCurrent,
+    currentLevel: input.congestion.currentLevel,
   });
-  const emptyReason = buildEmptyReason(summary, forecastFreshness);
+  const dashboardCongestion = useDashboardCurrent
+    ? {
+        level: round(input.congestion.currentLevel ?? 0, 3),
+        status: levelStatus(input.congestion.currentLevel ?? 0),
+        ...(input.congestion.source ? { source: input.congestion.source } : {}),
+        ...(input.congestion.basis ? { basis: input.congestion.basis } : {}),
+      }
+    : undefined;
 
   return {
     source: "deterministic-jit",
+    ...(simulationMode ? { mode: "simulation" as const } : {}),
+    ...(simulationMode ? { congestionMode } : {}),
     isFallback: input.congestion.source !== "port-mis",
-    basis: "jit-arrival-energy-decision",
+    basis: simulationMode
+      ? useDashboardCurrent
+        ? "jit-arrival-simulation-dashboard-current-congestion"
+        : "jit-arrival-simulation"
+      : "jit-arrival-energy-decision",
     lastUpdated: now.toISOString(),
-    dataSources: [
-      input.congestion.source === "port-mis" ? "port-mis-congestion" : "ais-congestion-fallback",
-      "ais-supabase-ships",
-      "port-mis-port-calls",
-      "energy-baseline-data",
-    ],
+    dataSources: simulationMode
+      ? [
+          "simulated-ships",
+          input.congestion.source === "port-mis" ? "port-mis-congestion" : "congestion-fallback",
+          "port-mis-port-calls",
+          "energy-baseline-data",
+        ]
+      : [
+          input.congestion.source === "port-mis" ? "port-mis-congestion" : "ais-congestion-fallback",
+          "ais-supabase-ships",
+          "port-mis-port-calls",
+          "energy-baseline-data",
+        ],
+    ...(dashboardCongestion ? { dashboardCongestion } : {}),
     forecastFreshness,
     decisions,
     summary,
     ...(emptyReason ? { emptyReason } : {}),
-    calculationNote: ENERGY_ESTIMATE_DISCLAIMER,
+    calculationNote: simulationMode
+      ? "시뮬레이션 결과는 사용자가 생성한 가상 선박 기준의 추정값이며 실제 운항 지시가 아닙니다."
+      : ENERGY_ESTIMATE_DISCLAIMER,
   };
 }

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { computeEnergyDecisions, type EnergyDecisionResult } from "../backend/prediction/energy-decision";
+import { computeSimulationEnergyDecisions } from "../backend/prediction/simulation-energy";
 import { BUSAN_PORT } from "../backend/ports/seed-port";
 import type { CongestionForecast, PortCall, Ship } from "../backend/ports/port-types";
 
@@ -148,5 +149,116 @@ assert.equal(staleLowFallbackResult.summary.recommendedCount, 0);
 assert.equal(staleLowFallbackResult.summary.currentLevelFallbackCount, 1);
 assert.equal(staleLowFallbackResult.forecastFreshness.isStale, true);
 assert.equal(staleLowFallbackResult.emptyReason?.code, "STALE_FORECAST_LOW_FALLBACK_CONGESTION");
+
+const simulationResult = computeSimulationEnergyDecisions({
+  simulatedShips: [
+    {
+      id: "sim-001",
+      name: "SIM CONTAINER 01",
+      lat: 35.05,
+      lng: 128.08,
+      sog: 10,
+      status: "underway",
+      vesselType: "container",
+      grossTonnage: 80000,
+      source: "simulation",
+    },
+  ],
+  congestion: congestion(0.9),
+  portCalls: [],
+  portConfig: BUSAN_PORT,
+  now,
+  congestionMode: "eta-forecast",
+});
+
+assert.equal(simulationResult.mode, "simulation");
+assert.equal(simulationResult.basis, "jit-arrival-simulation");
+assert.equal(simulationResult.congestionMode, "eta-forecast");
+assert.equal(simulationResult.validation.acceptedCount, 1);
+assert.equal(simulationResult.validation.rejectedCount, 0);
+assert.equal(simulationResult.summary.candidateCount, 1);
+assert.equal(simulationResult.summary.recommendedCount, 1);
+assert.equal(simulationResult.decisions[0].shipId, "sim-001");
+assert.equal(simulationResult.decisions[0].source, "simulation");
+assert.equal(simulationResult.decisions[0].isSimulated, true);
+assert.equal(simulationResult.decisions[0].grossTonnage, 80000);
+assert.equal(simulationResult.decisions[0].normalizedVesselType, "container");
+assert.equal(simulationResult.decisions[0].fuelConsumptionKgPerHour, 360);
+assert.ok(!simulationResult.decisions[0].mmsi);
+
+const dashboardCurrentSimulationResult = computeSimulationEnergyDecisions({
+  simulatedShips: [
+    {
+      id: "sim-near-port",
+      name: "SIM NEAR PORT",
+      lat: 35.05,
+      lng: 128.98,
+      sog: 10,
+      status: "underway",
+      vesselType: "container",
+      grossTonnage: 80000,
+      source: "simulation",
+    },
+  ],
+  congestion: { ...congestion(0.2), currentLevel: 0.9, forecast: [] },
+  portCalls: [],
+  portConfig: BUSAN_PORT,
+  now,
+});
+
+assert.equal(dashboardCurrentSimulationResult.mode, "simulation");
+assert.equal(dashboardCurrentSimulationResult.congestionMode, "dashboard-current");
+assert.equal(dashboardCurrentSimulationResult.basis, "jit-arrival-simulation-dashboard-current-congestion");
+assert.equal(dashboardCurrentSimulationResult.dashboardCongestion?.level, 0.9);
+assert.equal(dashboardCurrentSimulationResult.dashboardCongestion?.status, "혼잡");
+assert.equal(dashboardCurrentSimulationResult.summary.candidateCount, 1);
+assert.equal(dashboardCurrentSimulationResult.summary.recommendedCount, 1);
+assert.equal(dashboardCurrentSimulationResult.summary.etaForecastMatchedCount, 0);
+assert.equal(dashboardCurrentSimulationResult.summary.currentLevelFallbackCount, 0);
+assert.equal(dashboardCurrentSimulationResult.forecastFreshness.isStale, false);
+assert.equal(dashboardCurrentSimulationResult.decisions[0].congestionBasis, "dashboard-current-level");
+assert.equal(dashboardCurrentSimulationResult.decisions[0].currentCongestionLevel, 0.9);
+assert.ok(dashboardCurrentSimulationResult.decisions[0].distanceNm < 10);
+assert.ok(
+  dashboardCurrentSimulationResult.decisions[0].reasons.some((reason) =>
+    reason.includes("부산항과 가까운 위치라 JIT 감속 효과가 제한적일 수 있습니다.")
+  )
+);
+
+const emptySimulationResult = computeSimulationEnergyDecisions({
+  simulatedShips: [],
+  congestion: congestion(0.9),
+  portCalls: [],
+  portConfig: BUSAN_PORT,
+  now,
+});
+
+assert.equal(emptySimulationResult.validation.acceptedCount, 0);
+assert.equal(emptySimulationResult.summary.candidateCount, 0);
+assert.equal(emptySimulationResult.summary.recommendedCount, 0);
+
+const invalidSimulationResult = computeSimulationEnergyDecisions({
+  simulatedShips: [
+    {
+      id: "bad-sim",
+      name: "BAD SIM",
+      lat: 500,
+      lng: 128.08,
+      sog: 10,
+      status: "underway",
+      vesselType: "container",
+      grossTonnage: 80000,
+      source: "simulation",
+    },
+  ],
+  congestion: congestion(0.9),
+  portCalls: [],
+  portConfig: BUSAN_PORT,
+  now,
+});
+
+assert.equal(invalidSimulationResult.validation.acceptedCount, 0);
+assert.equal(invalidSimulationResult.validation.rejectedCount, 1);
+assert.equal(invalidSimulationResult.summary.recommendedCount, 0);
 
 console.log("energy decision validation passed");

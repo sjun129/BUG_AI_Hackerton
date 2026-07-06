@@ -16,6 +16,64 @@ const muted = "#8aa0c8";
 const panel = "rgba(11,18,34,0.86)";
 const border = "1px solid rgba(120,160,255,0.14)";
 
+interface SimulationDecision {
+  shipId?: string;
+  shipName: string;
+  source?: "simulation";
+  isSimulated?: boolean;
+  distanceNm: number;
+  currentSpeedKn: number;
+  recommendedSpeedKn: number;
+  idealJitSpeedKn: number;
+  currentEta: string;
+  recommendedEta: string;
+  currentCongestionLevel: number;
+  currentCongestionStatus: string;
+  recommendedCongestionLevel: number;
+  recommendedCongestionStatus: string;
+  congestionBasis: string;
+  currentWaitingMinutes: number;
+  optimizedWaitingMinutes: number;
+  reducedWaitingMinutes: number;
+  estimatedFuelSavedKg: number;
+  estimatedCo2ReducedKg: number;
+  confidence: string;
+  reasons?: string[];
+  calculationBasis?: string[];
+}
+
+interface SimulationEnergyResult {
+  mode?: "simulation";
+  congestionMode?: "dashboard-current" | "eta-forecast";
+  basis: string;
+  lastUpdated: string;
+  dashboardCongestion?: {
+    level: number;
+    status: string;
+    source?: string;
+    basis?: string;
+  };
+  decisions: SimulationDecision[];
+  summary: {
+    candidateCount: number;
+    recommendedCount: number;
+    totalReducedWaitingMinutes: number;
+    totalEstimatedFuelSavedKg: number;
+    totalEstimatedCo2ReducedKg: number;
+  };
+  emptyReason?: {
+    title: string;
+    description: string;
+    suggestions?: string[];
+  };
+  validation?: {
+    acceptedCount: number;
+    rejectedCount: number;
+    issues: Array<{ index: number | "simulatedShips"; message: string }>;
+  };
+  calculationNote?: string;
+}
+
 function nextDefaultName(ships: SimulatedShip[]): string {
   const maxNumber = ships.reduce((max, ship) => {
     const match = /^SIM VESSEL (\d+)$/i.exec(ship.name.trim());
@@ -31,6 +89,23 @@ function formatCoord(value: number): string {
 
 function formatGt(value: number): string {
   return value.toLocaleString("ko-KR");
+}
+
+function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function formatKg(value: number): string {
+  return `${Math.round(value).toLocaleString("ko-KR")}kg`;
 }
 
 function SimBadge() {
@@ -76,17 +151,71 @@ export default function SimulationPage() {
   const { simulatedShips, hydrated, addSimulatedShip, removeSimulatedShip, clearSimulatedShips } = useSimulatedShips();
   const [simulationMode, setSimulationMode] = useState(true);
   const [pendingPosition, setPendingPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [jitResult, setJitResult] = useState<SimulationEnergyResult | null>(null);
+  const [jitLoading, setJitLoading] = useState(false);
+  const [jitError, setJitError] = useState<string | null>(null);
+  const [jitNotice, setJitNotice] = useState<string | null>(null);
 
   const defaultName = useMemo(() => nextDefaultName(simulatedShips), [simulatedShips]);
+  const decisionsByShipId = useMemo(() => {
+    const map = new Map<string, SimulationDecision>();
+    jitResult?.decisions.forEach((decision) => {
+      if (decision.shipId) map.set(decision.shipId, decision);
+    });
+    return map;
+  }, [jitResult]);
 
   function createShip(input: NewSimulatedShipInput) {
     addSimulatedShip(input);
     setPendingPosition(null);
+    setJitResult(null);
+    setJitError(null);
+    setJitNotice(null);
+  }
+
+  function removeShip(id: string) {
+    removeSimulatedShip(id);
+    setJitResult(null);
+    setJitError(null);
+    setJitNotice(null);
   }
 
   function clearAll() {
     if (simulatedShips.length === 0) return;
     clearSimulatedShips();
+    setJitResult(null);
+    setJitError(null);
+    setJitNotice(null);
+  }
+
+  async function runJitSimulation() {
+    setJitError(null);
+    setJitNotice(null);
+    if (simulatedShips.length === 0) {
+      setJitNotice("가상 선박을 먼저 생성한 뒤 JIT 계산을 실행해주세요.");
+      return;
+    }
+
+    setJitLoading(true);
+    try {
+      const response = await fetch("/api/energy-decisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "simulation", congestionMode: "dashboard-current", simulatedShips }),
+      });
+      if (!response.ok) {
+        throw new Error(`JIT 계산 요청 실패 (${response.status})`);
+      }
+      const result = (await response.json()) as SimulationEnergyResult;
+      setJitResult(result);
+      if (result.summary.recommendedCount === 0) {
+        setJitNotice(result.emptyReason?.description ?? "현재 생성된 가상 선박 기준으로 JIT 감속 권고가 없습니다.");
+      }
+    } catch (error) {
+      setJitError(error instanceof Error ? error.message : "JIT 계산 중 오류가 발생했습니다.");
+    } finally {
+      setJitLoading(false);
+    }
   }
 
   const shellStyle: CSSProperties = {
@@ -160,7 +289,7 @@ export default function SimulationPage() {
           </section>
         </main>
 
-        <aside style={{ display: "flex", flexDirection: "column", minHeight: 0, gap: 12 }}>
+        <aside style={{ display: "flex", flexDirection: "column", minHeight: 0, gap: 12, overflow: "hidden" }}>
           <section style={{ padding: 14, borderRadius: 14, border, background: panel, backdropFilter: "blur(14px)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
               <div>
@@ -191,7 +320,44 @@ export default function SimulationPage() {
             </p>
           </section>
 
-          <section style={{ flex: 1, minHeight: 0, padding: 14, borderRadius: 14, border, background: panel, backdropFilter: "blur(14px)", overflow: "hidden" }}>
+          <section style={{ padding: 14, borderRadius: 14, border, background: panel, backdropFilter: "blur(14px)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 14, fontWeight: 900 }}>JIT 계산</h2>
+                <p style={{ margin: "7px 0 0", color: muted, fontSize: 11.5, lineHeight: 1.45 }}>
+                  생성한 가상 선박을 현재 Port-MIS 혼잡도 forecast와 결합해 JIT 감속 권고를 계산합니다.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={runJitSimulation}
+                disabled={jitLoading}
+                style={{
+                  flex: "none",
+                  height: 38,
+                  padding: "0 13px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: jitLoading ? "#334155" : "#38bdf8",
+                  color: jitLoading ? "#94a3b8" : "#082f49",
+                  fontSize: 12,
+                  fontWeight: 900,
+                  cursor: jitLoading ? "wait" : "pointer",
+                }}
+              >
+                {jitLoading ? "계산 중" : "JIT 계산 실행"}
+              </button>
+            </div>
+            {jitError && <div style={{ marginTop: 10, color: "#fecaca", fontSize: 12, fontWeight: 800 }}>{jitError}</div>}
+            {jitNotice && <div style={{ marginTop: 10, color: "#fde68a", fontSize: 12, lineHeight: 1.45 }}>{jitNotice}</div>}
+            {jitResult?.validation && jitResult.validation.rejectedCount > 0 && (
+              <div style={{ marginTop: 10, color: "#fdba74", fontSize: 11.5, lineHeight: 1.45 }}>
+                입력 검증에서 {jitResult.validation.rejectedCount}척이 제외되었습니다.
+              </div>
+            )}
+          </section>
+
+          <section style={{ flex: "0 0 260px", minHeight: 180, padding: 14, borderRadius: 14, border, background: panel, backdropFilter: "blur(14px)", overflow: "hidden" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <h2 style={{ margin: 0, fontSize: 14, fontWeight: 900 }}>가상 선박 목록</h2>
               <span style={{ color: muted, fontSize: 11, fontWeight: 800 }}>운영자 검토용</span>
@@ -202,6 +368,11 @@ export default function SimulationPage() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 9, height: "100%", overflowY: "auto", paddingRight: 2 }}>
                 {simulatedShips.map((ship) => (
+                  (() => {
+                    const decision = decisionsByShipId.get(ship.id);
+                    const stateLabel = jitLoading ? "계산 중" : decision ? "JIT 권고" : jitResult ? "권고 없음" : "계산 대기";
+                    const stateColor = decision ? "#bfdbfe" : jitResult ? "#cbd5e1" : "#8aa0c8";
+                    return (
                   <article
                     key={ship.id}
                     style={{
@@ -218,7 +389,7 @@ export default function SimulationPage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => removeSimulatedShip(ship.id)}
+                        onClick={() => removeShip(ship.id)}
                         aria-label={`${ship.name} 삭제`}
                         style={{
                           width: 28,
@@ -235,6 +406,7 @@ export default function SimulationPage() {
                         ×
                       </button>
                     </div>
+                    <div style={{ marginTop: 8, color: stateColor, fontSize: 11, fontWeight: 900 }}>{stateLabel}</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 10px", marginTop: 10, color: "#cbd5e1", fontSize: 12 }}>
                       <span>속도 {ship.sog}kn</span>
                       <span>{SIMULATED_VESSEL_TYPE_LABELS[ship.vesselType]}</span>
@@ -244,7 +416,102 @@ export default function SimulationPage() {
                       <span>경도 {formatCoord(ship.lng)}</span>
                     </div>
                   </article>
+                    );
+                  })()
                 ))}
+              </div>
+            )}
+          </section>
+
+          <section style={{ flex: "1 1 0", minHeight: 0, padding: 14, borderRadius: 14, border, background: panel, backdropFilter: "blur(14px)", overflow: "hidden" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h2 style={{ margin: 0, fontSize: 14, fontWeight: 900 }}>JIT 시뮬레이션 결과</h2>
+              {jitResult && <span style={{ color: muted, fontSize: 10.5 }}>{formatDateTime(jitResult.lastUpdated)}</span>}
+            </div>
+
+            {!jitResult ? (
+              <div style={{ color: muted, fontSize: 12.5, lineHeight: 1.6 }}>
+                JIT 계산 실행 후 권고 속도, ETA, 대기시간 감소, 연료 절감량, CO₂ 감축량이 여기에 표시됩니다.
+              </div>
+            ) : jitResult.summary.recommendedCount === 0 ? (
+              <div style={{ color: "#cbd5e1", fontSize: 12.5, lineHeight: 1.6 }}>
+                <strong style={{ color: text }}>현재 생성된 가상 선박 기준으로 JIT 감속 권고가 없습니다.</strong>
+                <br />
+                {jitResult.emptyReason?.description}
+                {jitResult.dashboardCongestion && (
+                  <div style={{ marginTop: 10, color: muted }}>
+                    현재 혼잡도 {Math.round(jitResult.dashboardCongestion.level * 100)}% · 후보 {jitResult.summary.candidateCount}척 · 권고{" "}
+                    {jitResult.summary.recommendedCount}척
+                  </div>
+                )}
+                {jitResult.emptyReason?.suggestions?.slice(0, 2).map((suggestion) => (
+                  <div key={suggestion} style={{ marginTop: 6, color: muted }}>
+                    {suggestion}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, height: "100%", overflowY: "auto", paddingRight: 2 }}>
+                {jitResult.dashboardCongestion && (
+                  <div style={{ borderRadius: 8, border: "1px solid rgba(56,189,248,.18)", background: "rgba(56,189,248,.08)", padding: 10, color: "#bae6fd", fontSize: 12, lineHeight: 1.45 }}>
+                    계산 기준: 대시보드 현재 Port-MIS 혼잡도 {Math.round(jitResult.dashboardCongestion.level * 100)}%
+                    {" · "}
+                    {jitResult.dashboardCongestion.status}
+                    <br />
+                    현재 /dashboard와 동일한 Port-MIS 혼잡도 기준으로 가상 선박의 JIT 감속 권고를 계산했습니다.
+                  </div>
+                )}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                  <div style={{ borderRadius: 8, background: "rgba(56,189,248,.08)", padding: 9 }}>
+                    <div style={{ color: muted, fontSize: 10, fontWeight: 800 }}>대기 감소</div>
+                    <div style={{ marginTop: 3, fontSize: 15, fontWeight: 900 }}>{jitResult.summary.totalReducedWaitingMinutes}분</div>
+                  </div>
+                  <div style={{ borderRadius: 8, background: "rgba(34,197,94,.08)", padding: 9 }}>
+                    <div style={{ color: muted, fontSize: 10, fontWeight: 800 }}>연료 절감</div>
+                    <div style={{ marginTop: 3, fontSize: 15, fontWeight: 900 }}>{formatKg(jitResult.summary.totalEstimatedFuelSavedKg)}</div>
+                  </div>
+                  <div style={{ borderRadius: 8, background: "rgba(250,204,21,.08)", padding: 9 }}>
+                    <div style={{ color: muted, fontSize: 10, fontWeight: 800 }}>CO₂ 감축</div>
+                    <div style={{ marginTop: 3, fontSize: 15, fontWeight: 900 }}>{formatKg(jitResult.summary.totalEstimatedCo2ReducedKg)}</div>
+                  </div>
+                </div>
+
+                {jitResult.decisions.map((decision) => (
+                  <article key={decision.shipId ?? decision.shipName} style={{ borderRadius: 10, border: "1px solid rgba(148,163,184,.14)", background: "rgba(255,255,255,.035)", padding: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <SimBadge />
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {decision.shipName}
+                      </div>
+                      <span style={{ color: "#bae6fd", fontSize: 10.5, fontWeight: 900 }}>{decision.confidence}</span>
+                    </div>
+                    <p style={{ margin: "9px 0 0", color: "#cbd5e1", fontSize: 11.5, lineHeight: 1.5 }}>
+                      현재 속도로 접근하면 혼잡 시간대 도착이 예상됩니다. 권고 속도로 감속하면 대기시간 일부를 항해시간으로 흡수할 수 있습니다.
+                    </p>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 10px", marginTop: 10, color: "#cbd5e1", fontSize: 12 }}>
+                      <span>현재 속도 {decision.currentSpeedKn}kn</span>
+                      <span>권고 속도 {decision.recommendedSpeedKn}kn</span>
+                      <span>현재 ETA {formatDateTime(decision.currentEta)}</span>
+                      <span>권고 ETA {formatDateTime(decision.recommendedEta)}</span>
+                      <span>현재 혼잡 {Math.round(decision.currentCongestionLevel * 100)}% · {decision.currentCongestionStatus}</span>
+                      <span>권고 시간대 {decision.recommendedCongestionStatus}</span>
+                      <span>대기 감소 {decision.reducedWaitingMinutes}분</span>
+                      <span>잔여 대기 {decision.optimizedWaitingMinutes}분</span>
+                      <span>연료 절감 {formatKg(decision.estimatedFuelSavedKg)}</span>
+                      <span>CO₂ 감축 {formatKg(decision.estimatedCo2ReducedKg)}</span>
+                      <span>계산 기준 {decision.congestionBasis === "dashboard-current-level" ? "dashboard-current" : decision.congestionBasis}</span>
+                    </div>
+                    {decision.reasons?.slice(0, 2).map((reason) => (
+                      <div key={reason} style={{ marginTop: 7, color: muted, fontSize: 10.5, lineHeight: 1.35 }}>
+                        {reason}
+                      </div>
+                    ))}
+                  </article>
+                ))}
+
+                <div style={{ color: "#fde68a", fontSize: 11.5, lineHeight: 1.5 }}>
+                  이 결과는 사용자가 생성한 가상 선박과 현재 대시보드 혼잡도를 결합한 시뮬레이션 추정값이며 실제 운항 지시가 아닙니다.
+                </div>
               </div>
             )}
           </section>
