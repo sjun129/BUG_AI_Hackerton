@@ -4,11 +4,12 @@ import dynamic from "next/dynamic";
 import { useMemo, useState, type CSSProperties } from "react";
 import { BUSAN_DISPLAY_PORT, SIMULATION_DESTINATION_PORTS } from "@/frontend/config/ports";
 import LeftRail from "@/frontend/components/LeftRail";
+import LiveShipImportModal from "@/frontend/components/simulation/LiveShipImportModal";
 import SimulatedShipModal from "@/frontend/components/SimulatedShipModal";
 import { useSimulatedShips } from "@/frontend/hooks/useSimulatedShips";
 import { useSimulationJit } from "@/frontend/hooks/useSimulationJit";
 import type { EnergyDecision } from "@/frontend/types/energy-decision";
-import type { NewSimulatedShipInput, SimulatedShip } from "@/frontend/types/simulation";
+import type { NewSimulatedShipInput, ScenarioShipSource, SimulatedShip } from "@/frontend/types/simulation";
 import { SIMULATED_VESSEL_TYPE_LABELS } from "@/frontend/types/simulation";
 
 const SimulationMap = dynamic(() => import("@/frontend/components/SimulationMap"), { ssr: false });
@@ -64,7 +65,8 @@ function destinationBasisLabel(basis: string): string {
   return basis;
 }
 
-function SimBadge() {
+function SimBadge({ source = "manual" }: { source?: ScenarioShipSource }) {
+  const snapshot = source === "ais-snapshot";
   return (
     <span
       style={{
@@ -73,14 +75,14 @@ function SimBadge() {
         height: 20,
         padding: "0 7px",
         borderRadius: 6,
-        background: "rgba(250,204,21,.16)",
-        color: "#fde68a",
+        background: snapshot ? "rgba(59,130,246,.18)" : "rgba(250,204,21,.16)",
+        color: snapshot ? "#bfdbfe" : "#fde68a",
         fontSize: 10,
         fontWeight: 900,
         letterSpacing: ".06em",
       }}
     >
-      SIM
+      {snapshot ? "LIVE SNAPSHOT" : "SIM"}
     </span>
   );
 }
@@ -107,6 +109,7 @@ export default function SimulationPage() {
   const { simulatedShips, hydrated, addSimulatedShip, removeSimulatedShip, clearSimulatedShips } = useSimulatedShips();
   const [simulationMode, setSimulationMode] = useState(true);
   const [pendingPosition, setPendingPosition] = useState<{ lat: number; lng: number } | null>(null);
+  const [liveImportOpen, setLiveImportOpen] = useState(false);
   const {
     result: jitResult,
     loading: jitLoading,
@@ -128,6 +131,7 @@ export default function SimulationPage() {
   function createShip(input: NewSimulatedShipInput) {
     addSimulatedShip(input);
     setPendingPosition(null);
+    setLiveImportOpen(false);
     resetSimulationJit();
   }
 
@@ -212,7 +216,7 @@ export default function SimulationPage() {
             </div>
 
             <div style={{ marginTop: 12, padding: "9px 10px", borderRadius: 8, background: "rgba(250,204,21,.12)", color: "#fde68a", fontSize: 12, fontWeight: 800 }}>
-              실제 운항 데이터가 아닌 가상 시나리오입니다. 이 페이지의 선박은 사용자가 생성한 가상 선박이며 실제 AIS/Port-MIS 데이터가 아닙니다.
+              실제 운항 지시가 아닌 시뮬레이션 시나리오입니다. 수동 선박은 사용자가 생성한 가상 선박이며, LIVE SNAPSHOT은 실제 선박 데이터를 수정하지 않고 복사한 항목입니다.
             </div>
           </section>
         </main>
@@ -224,27 +228,48 @@ export default function SimulationPage() {
                 <div style={{ color: muted, fontSize: 11, fontWeight: 800, letterSpacing: ".06em" }}>SIMULATION FLEET</div>
                 <div style={{ marginTop: 3, fontSize: 22, fontWeight: 900 }}>{hydrated ? simulatedShips.length : 0}척</div>
               </div>
-              <button
-                type="button"
-                onClick={clearAll}
-                disabled={simulatedShips.length === 0}
-                style={{
-                  height: 34,
-                  padding: "0 11px",
-                  borderRadius: 8,
-                  border: "1px solid rgba(248,113,113,.24)",
-                  background: simulatedShips.length === 0 ? "rgba(255,255,255,.03)" : "rgba(248,113,113,.1)",
-                  color: simulatedShips.length === 0 ? "#55657f" : "#fecaca",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  cursor: simulatedShips.length === 0 ? "not-allowed" : "pointer",
-                }}
-              >
-                전체 초기화
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setLiveImportOpen(true)}
+                  style={{
+                    height: 34,
+                    padding: "0 11px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(56,189,248,.24)",
+                    background: "rgba(56,189,248,.12)",
+                    color: "#bae6fd",
+                    fontSize: 12,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                  }}
+                >
+                  실시간 선박 불러오기
+                </button>
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  disabled={simulatedShips.length === 0}
+                  style={{
+                    height: 34,
+                    padding: "0 11px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(248,113,113,.24)",
+                    background: simulatedShips.length === 0 ? "rgba(255,255,255,.03)" : "rgba(248,113,113,.1)",
+                    color: simulatedShips.length === 0 ? "#55657f" : "#fecaca",
+                    fontSize: 12,
+                    fontWeight: 900,
+                    cursor: simulatedShips.length === 0 ? "not-allowed" : "pointer",
+                  }}
+                >
+                  전체 초기화
+                </button>
+              </div>
             </div>
             <p style={{ margin: "10px 0 0", color: muted, fontSize: 12, lineHeight: 1.5 }}>
               저장 위치는 브라우저 localStorage입니다. Supabase ships 테이블에는 저장하지 않습니다.
+              <br />
+              LIVE SNAPSHOT 항목은 원본 실제 선박 데이터를 수정하지 않습니다.
             </p>
           </section>
 
@@ -312,7 +337,7 @@ export default function SimulationPage() {
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <SimBadge />
+                      <SimBadge source={ship.source} />
                       <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {ship.name}
                       </div>
@@ -336,11 +361,15 @@ export default function SimulationPage() {
                       </button>
                     </div>
                     <div style={{ marginTop: 8, color: stateColor, fontSize: 11, fontWeight: 900 }}>{stateLabel}</div>
+                    <div style={{ marginTop: 4, color: muted, fontSize: 10.5 }}>
+                      {ship.source === "ais-snapshot" ? "실제 AIS/Supabase 선박을 시뮬레이션용으로 복사한 항목" : "사용자 생성 가상 선박"}
+                    </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 10px", marginTop: 10, color: "#cbd5e1", fontSize: 12 }}>
                       <span style={{ gridColumn: "1 / -1" }}>도착지 {destinationName}</span>
                       <span>속도 {ship.sog}kn</span>
-                      <span>{SIMULATED_VESSEL_TYPE_LABELS[ship.vesselType]}</span>
-                      <span>GT {formatGt(ship.grossTonnage)}</span>
+                      <span>{ship.vesselType ? SIMULATED_VESSEL_TYPE_LABELS[ship.vesselType] : "선종 -"}</span>
+                      <span>GT {ship.grossTonnage != null ? formatGt(ship.grossTonnage) : "-"}</span>
+                      {ship.mmsi || ship.imo ? <span style={{ gridColumn: "1 / -1" }}>MMSI/IMO {ship.mmsi ?? "-"} / {ship.imo ?? "-"}</span> : null}
                       <span>상태 underway</span>
                       <span>위도 {formatCoord(ship.lat)}</span>
                       <span>경도 {formatCoord(ship.lng)}</span>
@@ -413,11 +442,14 @@ export default function SimulationPage() {
                 {jitResult.decisions.map((decision) => (
                   <article key={decision.shipId ?? decision.shipName} style={{ borderRadius: 10, border: "1px solid rgba(148,163,184,.14)", background: "rgba(255,255,255,.035)", padding: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <SimBadge />
+                      <SimBadge source={decision.scenarioSource ?? "manual"} />
                       <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {decision.shipName}
                       </div>
                       <span style={{ color: "#bae6fd", fontSize: 10.5, fontWeight: 900 }}>{decision.confidence}</span>
+                    </div>
+                    <div style={{ marginTop: 7, color: muted, fontSize: 10.5, fontWeight: 800 }}>
+                      {decision.scenarioSource === "ais-snapshot" ? "LIVE SNAPSHOT · 실제 선박 데이터 기반 시뮬레이션" : "SIMULATION · 사용자 생성 가상 선박"}
                     </div>
                     <p style={{ margin: "9px 0 0", color: "#cbd5e1", fontSize: 11.5, lineHeight: 1.5 }}>
                       {decision.destinationPortName ?? simulationDestinationName(decision.destinationPortId)} 현재 혼잡도 기준으로 계산했습니다. 권고 속도로 감속하면 대기시간 일부를 항해시간으로 흡수할 수 있습니다.
@@ -436,6 +468,7 @@ export default function SimulationPage() {
                       <span>연료 절감 {formatKg(decision.estimatedFuelSavedKg)}</span>
                       <span>CO₂ 감축 {formatKg(decision.estimatedCo2ReducedKg)}</span>
                       <span>혼잡도 기준 {destinationBasisLabel(decision.congestionBasis)}</span>
+                      <span>source {decision.scenarioSource ?? "manual"}</span>
                     </div>
                     {decision.reasons?.slice(0, 2).map((reason) => (
                       <div key={reason} style={{ marginTop: 7, color: muted, fontSize: 10.5, lineHeight: 1.35 }}>
@@ -446,7 +479,7 @@ export default function SimulationPage() {
                 ))}
 
                 <div style={{ color: "#fde68a", fontSize: 11.5, lineHeight: 1.5 }}>
-                  이 결과는 사용자가 생성한 가상 선박과 선택 도착지의 현재 혼잡도를 결합한 시뮬레이션 추정값이며 실제 운항 지시가 아닙니다.
+                  이 결과는 실제 선박 데이터 또는 사용자가 만든 시나리오를 기반으로 한 시뮬레이션 추정값이며 실제 운항 지시가 아닙니다.
                 </div>
               </div>
             )}
@@ -460,6 +493,11 @@ export default function SimulationPage() {
         defaultName={defaultName}
         onCancel={() => setPendingPosition(null)}
         onCreate={createShip}
+      />
+      <LiveShipImportModal
+        open={liveImportOpen}
+        onCancel={() => setLiveImportOpen(false)}
+        onImport={createShip}
       />
     </div>
   );

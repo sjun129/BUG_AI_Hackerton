@@ -1,8 +1,18 @@
+import type { ScenarioShipSource } from "@/frontend/types/simulation";
+
 export type EnergyDecisionConfidence = "high" | "medium" | "low";
 
 export interface EnergyDecision {
   shipId?: string;
   shipName: string;
+  scenarioSource?: ScenarioShipSource;
+  isScenario?: true;
+  isSimulated?: true;
+  originalShipId?: string;
+  mmsi?: string;
+  imo?: string;
+  callSign?: string;
+  snapshotAt?: string;
   destinationPortId?: string;
   destinationPortName?: string;
   distanceNm: number;

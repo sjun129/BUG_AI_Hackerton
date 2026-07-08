@@ -5,6 +5,7 @@ import {
   type EnergyDecisionCongestionMode,
   type EnergyDecisionResult,
   type EnergyDecisionShipInput,
+  type ScenarioShipSource,
 } from "./energy-decision";
 
 const SIMULATED_VESSEL_TYPES = ["container", "bulk", "tanker", "lng", "generalCargo"] as const;
@@ -18,11 +19,16 @@ export interface SimulatedShipInput {
   lng: number;
   sog: number;
   status: "underway";
-  vesselType: SimulatedVesselType;
-  grossTonnage: number;
+  vesselType?: SimulatedVesselType;
+  grossTonnage?: number;
   destinationPortId?: SimulationDestinationPortId;
-  source: "simulation";
+  source?: "simulation" | ScenarioShipSource;
   createdAt?: string;
+  originalShipId?: string;
+  mmsi?: string;
+  imo?: string;
+  callSign?: string;
+  snapshotAt?: string;
 }
 
 export interface SimulationValidationIssue {
@@ -85,6 +91,12 @@ function normalizeDestinationPortId(
   return found ? { destinationPortId: found.id, invalid: false } : { invalid: true };
 }
 
+function normalizeScenarioSource(value: unknown): { source: ScenarioShipSource; invalid: boolean } {
+  if (value == null || value === "" || value === "simulation" || value === "manual") return { source: "manual", invalid: false };
+  if (value === "ais-snapshot") return { source: "ais-snapshot", invalid: false };
+  return { source: "manual", invalid: true };
+}
+
 function pushIssue(issues: SimulationValidationIssue[], index: number, message: string) {
   issues.push({ index, message });
 }
@@ -121,13 +133,14 @@ export function normalizeSimulatedShipsForDecision(value: unknown, portConfig: P
     const grossTonnage = finiteNumber(raw.grossTonnage);
     const vesselType = raw.vesselType;
     const destination = normalizeDestinationPortId(raw.destinationPortId, portConfig);
+    const scenarioSource = normalizeScenarioSource(raw.source);
 
     if (!id) {
       pushIssue(issues, index, "id가 없거나 비어 있습니다.");
       return;
     }
-    if (raw.source !== "simulation") {
-      pushIssue(issues, index, 'source는 "simulation"이어야 합니다.');
+    if (scenarioSource.invalid) {
+      pushIssue(issues, index, 'source는 "manual" 또는 "ais-snapshot"이어야 합니다.');
       return;
     }
     if (raw.status !== "underway") {
@@ -146,11 +159,11 @@ export function normalizeSimulatedShipsForDecision(value: unknown, portConfig: P
       pushIssue(issues, index, "sog는 3 이상 30 이하의 숫자여야 합니다.");
       return;
     }
-    if (!isSimulatedVesselType(vesselType)) {
+    if (vesselType != null && !isSimulatedVesselType(vesselType)) {
       pushIssue(issues, index, "vesselType이 지원 범위가 아닙니다.");
       return;
     }
-    if (grossTonnage == null || grossTonnage < 100) {
+    if (grossTonnage != null && grossTonnage < 100) {
       pushIssue(issues, index, "grossTonnage는 100 이상의 숫자여야 합니다.");
       return;
     }
@@ -166,11 +179,16 @@ export function normalizeSimulatedShipsForDecision(value: unknown, portConfig: P
       lon: lng,
       sog,
       status: "underway",
-      vesselType,
-      grossTonnage: Math.round(grossTonnage),
+      ...(isSimulatedVesselType(vesselType) ? { vesselType } : {}),
+      ...(grossTonnage != null ? { grossTonnage: Math.round(grossTonnage) } : {}),
       destinationPortId: destination.destinationPortId,
-      source: "simulation",
+      source: scenarioSource.source,
       isSimulated: true,
+      ...(typeof raw.originalShipId === "string" ? { originalShipId: raw.originalShipId } : {}),
+      ...(typeof raw.mmsi === "string" ? { mmsi: raw.mmsi } : {}),
+      ...(typeof raw.imo === "string" ? { imo: raw.imo } : {}),
+      ...(typeof raw.callSign === "string" ? { callSign: raw.callSign } : {}),
+      ...(typeof raw.snapshotAt === "string" ? { snapshotAt: raw.snapshotAt } : {}),
     });
   });
 

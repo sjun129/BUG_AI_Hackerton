@@ -44,6 +44,7 @@ export type CongestionBasis =
   | "global-current-level-fallback";
 export type CurrentInPortBasis = "actual-port-calls" | "level-times-p99" | "unknown";
 export type EnergyDecisionCongestionMode = "dashboard-current" | "eta-forecast";
+export type ScenarioShipSource = "manual" | "ais-snapshot";
 
 export interface EnergyDecisionShipInput {
   id?: string;
@@ -60,8 +61,10 @@ export interface EnergyDecisionShipInput {
   grossTonnage?: number;
   vesselType?: string;
   destinationPortId?: SimulationDestinationPortId;
-  source?: "simulation";
+  source?: "simulation" | ScenarioShipSource;
   isSimulated?: boolean;
+  originalShipId?: string;
+  snapshotAt?: string;
 }
 
 export interface ComputeEnergyDecisionsInput {
@@ -82,7 +85,11 @@ export interface EnergyDecision {
   mmsi?: string;
   imo?: string;
   source?: "simulation";
+  scenarioSource?: ScenarioShipSource;
+  isScenario?: true;
   isSimulated?: boolean;
+  originalShipId?: string;
+  snapshotAt?: string;
   destinationPortId?: SimulationDestinationPortId;
   destinationPortName?: string;
 
@@ -386,24 +393,35 @@ function findPortCall(ship: EnergyDecisionShipInput, portCalls: PortCall[]): Por
 }
 
 function isSimulatedShip(ship: EnergyDecisionShipInput): boolean {
-  return ship.source === "simulation" || ship.isSimulated === true;
+  return ship.source === "simulation" || ship.source === "manual" || ship.source === "ais-snapshot" || ship.isSimulated === true;
+}
+
+function scenarioSource(ship: EnergyDecisionShipInput): ScenarioShipSource | undefined {
+  if (ship.source === "ais-snapshot") return "ais-snapshot";
+  if (ship.source === "manual" || ship.source === "simulation" || ship.isSimulated === true) return "manual";
+  return undefined;
 }
 
 function enrichShip(ship: EnergyDecisionShipInput, portCalls: PortCall[]): EnrichedShip {
   if (isSimulatedShip(ship)) {
-    const vesselType = ship.vesselType;
-    const grossTonnage = ship.grossTonnage;
+    const useSnapshotFallback = scenarioSource(ship) === "ais-snapshot";
+    const spec = useSnapshotFallback
+      ? findVesselSpecByMmsi(ship.mmsi) ?? findVesselSpecByImo(ship.imo) ?? findVesselSpecByName(ship.name)
+      : undefined;
+    const portCall = useSnapshotFallback ? findPortCall(ship, portCalls) : undefined;
+    const vesselType = ship.vesselType ?? portCall?.vesselType ?? spec?.vesselType;
+    const grossTonnage = ship.grossTonnage ?? portCall?.grossTonnage ?? spec?.grossTonnage;
     const normalizedVesselType = normalizeVesselType(vesselType);
     const waitingFuel = getWaitingFuelKgPerHour({ grossTonnage, vesselType });
 
     return {
       ...(vesselType ? { vesselType } : {}),
       ...(grossTonnage != null ? { grossTonnage } : {}),
-      ...(ship.imo ? { imo: ship.imo } : {}),
-      ...(ship.callSign ? { callSign: ship.callSign } : {}),
+      ...(ship.imo ?? spec?.imo ? { imo: ship.imo ?? spec?.imo } : {}),
+      ...(ship.callSign ?? portCall?.callSign ? { callSign: ship.callSign ?? portCall?.callSign } : {}),
       sizeClass: waitingFuel.sizeClass,
       normalizedVesselType,
-      matchBasis: "simulation-input",
+      matchBasis: useSnapshotFallback ? "ais-snapshot" : "simulation-input",
     };
   }
 
@@ -458,6 +476,7 @@ function confidence(params: {
   vesselType?: string;
   fuelConfidence: Confidence;
   currentInPortBasis: CurrentInPortBasis;
+  scenarioSource?: ScenarioShipSource;
 }): Confidence {
   let score = 0;
   if (
@@ -473,6 +492,7 @@ function confidence(params: {
   if (params.fuelConfidence === "high") score += 2;
   else if (params.fuelConfidence === "medium") score += 1;
   if (params.currentInPortBasis === "actual-port-calls") score += 1;
+  if (params.scenarioSource === "ais-snapshot") score += 1;
 
   if (score >= 5) return "high";
   if (score >= 3) return "medium";
@@ -571,6 +591,7 @@ export function computeEnergyDecisions(input: ComputeEnergyDecisionsInput): Ener
     if (ship.status !== "underway" || ship.sog < MIN_SOG_KN) continue;
 
     const simulated = isSimulatedShip(ship) || simulationMode;
+    const scenario = scenarioSource(ship) ?? (simulationMode ? "manual" : undefined);
     const destination = simulated ? simulationDestinationFor(portConfig, ship.destinationPortId) : undefined;
     const destinationCurrent = destination
       ? destinationCurrentCongestion({
@@ -676,7 +697,11 @@ export function computeEnergyDecisions(input: ComputeEnergyDecisionsInput): Ener
         ? `ETA 시간대 forecast bucket(${bucketStart(currentEtaDate)}) 혼잡도 ${round(currentCongestionLevel, 2)} 사용`
         : `ETA 시간대 forecast bucket 없음, currentLevel ${round(currentCongestionLevel, 2)} 사용`,
       `JIT 속도 ${round(recommendedSpeedKn, 1)}kn로 ${Math.round(reducedWaitingMinutes)}분 대기 흡수`,
-      isSimulatedShip(ship) ? "가상 선박 입력값 기준으로 선종·총톤수 사용" : `선박 제원 매칭 기준: ${enriched.matchBasis}`,
+      isSimulatedShip(ship)
+        ? scenario === "ais-snapshot"
+          ? "실제 선박 스냅샷의 위치·속도와 시나리오 입력값 기준으로 계산"
+          : "가상 선박 입력값 기준으로 선종·총톤수 사용"
+        : `선박 제원 매칭 기준: ${enriched.matchBasis}`,
       fuelInference.reason,
     ];
     if (simulated && distanceNm < MIN_DISTANCE_NM) {
@@ -700,7 +725,16 @@ export function computeEnergyDecisions(input: ComputeEnergyDecisionsInput): Ener
       ...(enriched.callSign ? { callSign: enriched.callSign } : {}),
       ...(ship.mmsi ? { mmsi: ship.mmsi } : {}),
       ...(enriched.imo ? { imo: enriched.imo } : {}),
-      ...(isSimulatedShip(ship) ? { source: "simulation", isSimulated: true } : {}),
+      ...(isSimulatedShip(ship)
+        ? {
+            source: "simulation" as const,
+            isSimulated: true,
+            isScenario: true as const,
+            ...(scenario ? { scenarioSource: scenario } : {}),
+            ...(ship.originalShipId ? { originalShipId: ship.originalShipId } : {}),
+            ...(ship.snapshotAt ? { snapshotAt: ship.snapshotAt } : {}),
+          }
+        : {}),
       ...(destination ? { destinationPortId: destination.id, destinationPortName: destination.name } : {}),
       status: "underway",
       distanceNm: round(distanceNm, 1),
@@ -740,6 +774,7 @@ export function computeEnergyDecisions(input: ComputeEnergyDecisionsInput): Ener
         vesselType: enriched.vesselType,
         fuelConfidence: fuelInference.confidence,
         currentInPortBasis: inPort.basis,
+        scenarioSource: scenario,
       }),
       reasons,
       calculationBasis,
@@ -835,7 +870,7 @@ export function computeEnergyDecisions(input: ComputeEnergyDecisionsInput): Ener
     lastUpdated: now.toISOString(),
     dataSources: simulationMode
       ? [
-          "simulated-ships",
+          "scenario-ships",
           input.congestion.source === "port-mis" ? "port-mis-congestion" : "congestion-fallback",
           "port-mis-port-calls",
           "energy-baseline-data",
@@ -853,7 +888,7 @@ export function computeEnergyDecisions(input: ComputeEnergyDecisionsInput): Ener
     summary: finalSummary,
     ...(emptyReason ? { emptyReason } : {}),
     calculationNote: simulationMode
-      ? "시뮬레이션 결과는 사용자가 생성한 가상 선박 기준의 추정값이며 실제 운항 지시가 아닙니다."
+      ? "시뮬레이션 결과는 시나리오 선박 기준의 추정값이며 실제 운항 지시가 아닙니다."
       : ENERGY_ESTIMATE_DISCLAIMER,
   };
 }

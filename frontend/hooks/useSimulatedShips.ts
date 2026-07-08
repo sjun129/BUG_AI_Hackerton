@@ -2,16 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_SIMULATION_DESTINATION_ID, SIMULATION_DESTINATION_PORTS } from "@/frontend/config/ports";
-import type { NewSimulatedShipInput, SimulatedShip } from "@/frontend/types/simulation";
+import type { NewSimulatedShipInput, ScenarioShipSource, SimulatedShip } from "@/frontend/types/simulation";
 import { isSimulatedVesselType } from "@/frontend/types/simulation";
 
 export const SIMULATED_SHIPS_STORAGE_KEY = "bug-ai-hackathon:simulated-ships";
 
-function createSimulationId(): string {
+function createSimulationId(source: ScenarioShipSource, input?: Pick<NewSimulatedShipInput, "id" | "mmsi" | "originalShipId">): string {
+  if (input?.id) return input.id;
+  const prefix = source === "ais-snapshot" ? "snapshot" : "sim";
+  const stableId = input?.originalShipId ?? input?.mmsi;
+  if (stableId) return `${prefix}-${stableId}-${Date.now()}`;
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `sim-${crypto.randomUUID()}`;
+    return `${prefix}-${crypto.randomUUID()}`;
   }
-  return `sim-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -28,6 +32,10 @@ function normalizeDestinationPortId(value: unknown): SimulatedShip["destinationP
     : defaultDestinationPortId();
 }
 
+function normalizeSource(value: unknown): ScenarioShipSource {
+  return value === "ais-snapshot" ? "ais-snapshot" : "manual";
+}
+
 function normalizeSimulatedShip(value: unknown): SimulatedShip | null {
   if (!value || typeof value !== "object") return null;
   const ship = value as Record<string, unknown>;
@@ -38,13 +46,12 @@ function normalizeSimulatedShip(value: unknown): SimulatedShip | null {
     !isFiniteNumber(ship.lng) ||
     !isFiniteNumber(ship.sog) ||
     ship.status !== "underway" ||
-    !isSimulatedVesselType(ship.vesselType) ||
-    !isFiniteNumber(ship.grossTonnage) ||
-    ship.source !== "simulation" ||
     typeof ship.createdAt !== "string"
   ) {
     return null;
   }
+  const vesselType = isSimulatedVesselType(ship.vesselType) ? ship.vesselType : undefined;
+  const grossTonnage = isFiniteNumber(ship.grossTonnage) && ship.grossTonnage >= 100 ? Math.round(ship.grossTonnage) : undefined;
 
   return {
     id: ship.id,
@@ -53,11 +60,16 @@ function normalizeSimulatedShip(value: unknown): SimulatedShip | null {
     lng: ship.lng,
     sog: ship.sog,
     status: "underway",
-    vesselType: ship.vesselType,
-    grossTonnage: ship.grossTonnage,
+    ...(vesselType ? { vesselType } : {}),
+    ...(grossTonnage != null ? { grossTonnage } : {}),
     destinationPortId: normalizeDestinationPortId(ship.destinationPortId),
-    source: "simulation",
+    source: normalizeSource(ship.source),
     createdAt: ship.createdAt,
+    ...(typeof ship.originalShipId === "string" ? { originalShipId: ship.originalShipId } : {}),
+    ...(typeof ship.mmsi === "string" ? { mmsi: ship.mmsi } : {}),
+    ...(typeof ship.imo === "string" ? { imo: ship.imo } : {}),
+    ...(typeof ship.callSign === "string" ? { callSign: ship.callSign } : {}),
+    ...(typeof ship.snapshotAt === "string" ? { snapshotAt: ship.snapshotAt } : {}),
   };
 }
 
@@ -88,12 +100,13 @@ export function useSimulatedShips() {
   }, [hydrated, simulatedShips]);
 
   const addSimulatedShip = useCallback((input: NewSimulatedShipInput) => {
+    const source = normalizeSource(input.source);
     const ship: SimulatedShip = {
       ...input,
-      id: createSimulationId(),
+      id: createSimulationId(source, input),
       status: "underway",
-      source: "simulation",
-      createdAt: new Date().toISOString(),
+      source,
+      createdAt: input.createdAt ?? new Date().toISOString(),
     };
     setSimulatedShips((prev) => [...prev, ship]);
     return ship;

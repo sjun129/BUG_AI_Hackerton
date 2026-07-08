@@ -10,10 +10,13 @@ export interface Ship {
   eta: string;
   status: ShipStatus;
   callSign?: string;
+  imo?: string;
+  vesselType?: string;
   previousPort?: string;
   nextPort?: string;
   berthName?: string;
   grossTonnage?: number;
+  lastUpdated?: string;
 }
 
 export type BerthType = "접안" | "묘박";

@@ -4,25 +4,33 @@ export const SIMULATED_VESSEL_TYPES = ["container", "bulk", "tanker", "lng", "ge
 
 export type SimulatedVesselType = (typeof SIMULATED_VESSEL_TYPES)[number];
 export type SimulationDestinationPortId = DisplayPortId;
+export type ScenarioShipSource = "manual" | "ais-snapshot";
 
-export interface SimulatedShip {
+export interface ScenarioShip {
   id: string;
   name: string;
   lat: number;
   lng: number;
   sog: number;
   status: "underway";
-  vesselType: SimulatedVesselType;
-  grossTonnage: number;
+  vesselType?: SimulatedVesselType;
+  grossTonnage?: number;
   destinationPortId: SimulationDestinationPortId;
-  source: "simulation";
+  source: ScenarioShipSource;
   createdAt: string;
+  originalShipId?: string;
+  mmsi?: string;
+  imo?: string;
+  callSign?: string;
+  snapshotAt?: string;
 }
 
-export type NewSimulatedShipInput = Pick<
-  SimulatedShip,
-  "name" | "lat" | "lng" | "sog" | "vesselType" | "grossTonnage" | "destinationPortId"
->;
+export type SimulatedShip = ScenarioShip;
+export type NewSimulatedShipInput = Omit<ScenarioShip, "id" | "status" | "createdAt" | "source"> & {
+  id?: string;
+  source?: ScenarioShipSource;
+  createdAt?: string;
+};
 
 export const SIMULATED_VESSEL_TYPE_LABELS: Record<SimulatedVesselType, string> = {
   container: "컨테이너선",

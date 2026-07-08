@@ -84,6 +84,7 @@ assert.equal(forecastResult.decisions[0].currentCongestionLevel, 0.9);
 assert.ok(forecastResult.decisions[0].recommendedSpeedKn < forecastResult.decisions[0].currentSpeedKn);
 assert.equal(forecastResult.decisions[0].sizeClass, "large");
 assert.equal(forecastResult.decisions[0].normalizedVesselType, "container");
+assert.equal(forecastResult.decisions[0].scenarioSource, undefined);
 
 const fallbackResult = computeEnergyDecisions({
   ships: [ship({ lon: 127.4 })],
@@ -196,12 +197,67 @@ assert.equal(simulationResult.summary.recommendedCount, 1);
 assert.equal(simulationResult.decisions[0].shipId, "sim-001");
 assert.equal(simulationResult.decisions[0].source, "simulation");
 assert.equal(simulationResult.decisions[0].isSimulated, true);
+assert.equal(simulationResult.decisions[0].scenarioSource, "manual");
 assert.equal(simulationResult.decisions[0].destinationPortId, "busan-north");
 assert.equal(simulationResult.decisions[0].destinationPortName, "부산항 북항");
 assert.equal(simulationResult.decisions[0].grossTonnage, 80000);
 assert.equal(simulationResult.decisions[0].normalizedVesselType, "container");
 assert.equal(simulationResult.decisions[0].fuelConsumptionKgPerHour, 360);
 assert.ok(!simulationResult.decisions[0].mmsi);
+
+const manualScenarioResult = computeSimulationEnergyDecisions({
+  simulatedShips: [
+    {
+      id: "manual-001",
+      name: "MANUAL SCENARIO",
+      lat: 35.05,
+      lng: 128.08,
+      sog: 10,
+      status: "underway",
+      vesselType: "container",
+      grossTonnage: 80000,
+      source: "manual",
+    },
+  ],
+  congestion: congestion(0.9),
+  portCalls: [],
+  portConfig: BUSAN_PORT,
+  now,
+  congestionMode: "eta-forecast",
+});
+
+assert.equal(manualScenarioResult.validation.acceptedCount, 1);
+assert.equal(manualScenarioResult.decisions[0].scenarioSource, "manual");
+assert.equal(manualScenarioResult.decisions[0].destinationPortId, "busan-north");
+
+const snapshotScenarioResult = computeSimulationEnergyDecisions({
+  simulatedShips: [
+    {
+      id: "snapshot-001",
+      name: "LIVE SNAPSHOT",
+      lat: 35.05,
+      lng: 128.08,
+      sog: 10,
+      status: "underway",
+      destinationPortId: "busan-new",
+      source: "ais-snapshot",
+      originalShipId: "440000111",
+      snapshotAt: now.toISOString(),
+    },
+  ],
+  congestion: { ...congestion(0.2), currentLevel: 0.2, forecast: [] },
+  regionalCongestion: regionalCongestion({ sinhang: 0.9 }),
+  portCalls: [],
+  portConfig: BUSAN_PORT,
+  now,
+});
+
+assert.equal(snapshotScenarioResult.validation.acceptedCount, 1);
+assert.equal(snapshotScenarioResult.summary.recommendedCount, 1);
+assert.equal(snapshotScenarioResult.decisions[0].scenarioSource, "ais-snapshot");
+assert.equal(snapshotScenarioResult.decisions[0].isScenario, true);
+assert.equal(snapshotScenarioResult.decisions[0].originalShipId, "440000111");
+assert.equal(snapshotScenarioResult.decisions[0].destinationPortId, "busan-new");
 
 const dashboardCurrentSimulationResult = computeSimulationEnergyDecisions({
   simulatedShips: [

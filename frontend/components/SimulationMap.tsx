@@ -31,16 +31,17 @@ function SimulationContextMenuHandler({
   return null;
 }
 
-function simulatedShipIcon(): L.DivIcon {
+function simulatedShipIcon(label: "SIM" | "SNAP"): L.DivIcon {
+  const snapshot = label === "SNAP";
   const html = `
     <div style="
       width:34px;height:34px;border-radius:10px;
-      background:#facc15;color:#111827;
+      background:${snapshot ? "#60a5fa" : "#facc15"};color:${snapshot ? "#082f49" : "#111827"};
       border:2px solid #0b1220;
       display:flex;align-items:center;justify-content:center;
       font-weight:900;font-size:10px;letter-spacing:.04em;
       box-shadow:0 10px 24px rgba(0,0,0,.36);
-    ">SIM</div>`;
+    ">${label}</div>`;
   return L.divIcon({
     html,
     className: "simulation-ship-marker",
@@ -69,7 +70,8 @@ function destinationIcon(shortName: string): L.DivIcon {
   });
 }
 
-const simIcon = simulatedShipIcon();
+const simIcon = simulatedShipIcon("SIM");
+const snapshotIcon = simulatedShipIcon("SNAP");
 const basemap = BASEMAPS.find((item) => item.id === "dark" && item.url) ?? BASEMAPS.find((item) => item.url) ?? BASEMAPS[0];
 
 export default function SimulationMap({ ships, simulationMode, onMapContextMenu }: SimulationMapProps) {
@@ -99,21 +101,24 @@ export default function SimulationMap({ ships, simulationMode, onMapContextMenu 
         {ships.map((ship) => (
           (() => {
             const destination = SIMULATION_DESTINATION_PORTS.find((item) => item.id === ship.destinationPortId) ?? SIMULATION_DESTINATION_PORTS[0];
+            const isSnapshot = ship.source === "ais-snapshot";
+            const sourceLabel = isSnapshot ? "LIVE SNAPSHOT" : "SIM";
             return (
-          <Marker key={ship.id} position={[ship.lat, ship.lng]} icon={simIcon}>
+          <Marker key={ship.id} position={[ship.lat, ship.lng]} icon={isSnapshot ? snapshotIcon : simIcon}>
             <Tooltip direction="top" offset={[0, -16]}>
-              <span style={{ fontWeight: 800 }}>SIM</span> · {ship.name} · {destination?.shortName ?? "북항"} · {ship.sog}kn
+              <span style={{ fontWeight: 800 }}>{sourceLabel}</span> · {ship.name} · {destination?.shortName ?? "북항"} · {ship.sog}kn
             </Tooltip>
             <Popup>
               <div className="text-sm">
-                <p style={{ margin: "0 0 6px", fontWeight: 900, color: "#ca8a04", letterSpacing: ".06em" }}>SIMULATION</p>
+                <p style={{ margin: "0 0 6px", fontWeight: 900, color: isSnapshot ? "#2563eb" : "#ca8a04", letterSpacing: ".06em" }}>{sourceLabel}</p>
                 <p style={{ margin: "3px 0", fontWeight: 800 }}>{ship.name}</p>
                 <p style={{ margin: "3px 0" }}>도착지: {destination?.name ?? "부산항 북항"}</p>
                 <p style={{ margin: "3px 0" }}>속도: {ship.sog}kn</p>
-                <p style={{ margin: "3px 0" }}>선종: {SIMULATED_VESSEL_TYPE_LABELS[ship.vesselType]}</p>
-                <p style={{ margin: "3px 0" }}>GT: {ship.grossTonnage.toLocaleString()}</p>
+                <p style={{ margin: "3px 0" }}>선종: {ship.vesselType ? SIMULATED_VESSEL_TYPE_LABELS[ship.vesselType] : "-"}</p>
+                <p style={{ margin: "3px 0" }}>GT: {ship.grossTonnage?.toLocaleString() ?? "-"}</p>
+                {ship.mmsi || ship.imo ? <p style={{ margin: "3px 0" }}>MMSI/IMO: {ship.mmsi ?? "-"} / {ship.imo ?? "-"}</p> : null}
                 <p style={{ margin: "6px 0 0", color: "#64748b", fontSize: 11 }}>
-                  실제 AIS/Port-MIS 선박이 아닌 가상 선박입니다.
+                  {isSnapshot ? "실제 선박의 현재 위치를 복사한 시뮬레이션 항목입니다." : "사용자가 생성한 가상 선박입니다."}
                 </p>
               </div>
             </Popup>
