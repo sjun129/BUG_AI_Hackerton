@@ -1,6 +1,6 @@
 "use client";
 
-import { BUSAN_PORT } from "@/backend/ports/seed-port";
+import { BUSAN_DISPLAY_PORT, congestionGaugeInfo } from "@/frontend/config/ports";
 
 interface CongestionGaugeProps {
   level: number; // 0~1
@@ -10,10 +10,7 @@ const ARC_LEN = Math.PI * 63; // 반원 게이지 호 길이 ≈ 197.9
 
 // 혼잡도(0~1)를 seed-port 임계값에 맞춰 색상·상태로 매핑한다.
 function congestionInfo(level: number) {
-  const { low, medium } = BUSAN_PORT.congestionThresholds;
-  if (level <= low) return { color: "#16a34a", status: "원활" };
-  if (level <= medium) return { color: "#e8952b", status: "보통" };
-  return { color: "#e0483d", status: "혼잡" };
+  return congestionGaugeInfo(level);
 }
 
 export default function CongestionGauge({ level }: CongestionGaugeProps) {
@@ -70,8 +67,8 @@ export default function CongestionGauge({ level }: CongestionGaugeProps) {
       </div>
 
       <div style={{ marginTop: 10, fontSize: 12.5, color: "#8a97b3", fontWeight: 600, textAlign: "center" }}>
-        임계값 · 원활 ≤ {Math.round(BUSAN_PORT.congestionThresholds.low * 100)}% · 보통 ≤{" "}
-        {Math.round(BUSAN_PORT.congestionThresholds.medium * 100)}%
+        임계값 · 원활 ≤ {Math.round(BUSAN_DISPLAY_PORT.congestionThresholds.low * 100)}% · 보통 ≤{" "}
+        {Math.round(BUSAN_DISPLAY_PORT.congestionThresholds.medium * 100)}%
       </div>
     </div>
   );

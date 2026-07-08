@@ -5,24 +5,23 @@
 // 조립·파생 계산은 backend/vessel/build-view.ts(순수 함수)에서 하고, 여기서는 렌더만 한다.
 // 소스가 없는 항목(엔진 계기·CII 등급·태풍 트랙)은 demo-telemetry 값을 쓰되 "예시·미연동"으로 표기.
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceDot, ResponsiveContainer } from "recharts";
+import dynamic from "next/dynamic";
 import LeftRail from "@/frontend/components/LeftRail";
-import type { CongestionForecast, PortCall, Ship } from "@/backend/ports/port-types";
-import type { WeatherForecast } from "@/backend/weather/types";
-import { BUSAN_PORT } from "@/backend/ports/seed-port";
 import {
-  monitorCandidates,
-  buildVesselView,
   beaufortFromWindMs,
-  windDir8,
-  congestionLabel,
+  CII_CURVE_POINTS,
+  CII_GRADE_BANDS,
+  CII_GRADE_COLOR,
+  DEMO_ENGINE,
+  DEMO_TYPHOON,
   STATUS_LABEL,
-  type VesselCandidate,
-} from "@/backend/vessel/build-view";
-import { DEMO_ENGINE, DEMO_TYPHOON, CII_GRADE_BANDS, ciiCurveBySpeed } from "@/backend/vessel/demo-telemetry";
-import { computeCiiStatus, CII_GRADE_COLOR } from "@/backend/prediction/cii";
-import { haversineDistanceKm } from "@/backend/prediction/eta";
-import { recommendSpeed } from "@/backend/prediction/speed-advisory";
+  windDir8,
+} from "@/frontend/config/vessel-display";
+import { BUSAN_DISPLAY_PORT, congestionDisplayColor, congestionDisplayLabel } from "@/frontend/config/ports";
+import type { WeatherForecast } from "@/frontend/types/domain";
+import type { VesselMonitorData } from "@/frontend/types/vessel";
+
+const CiiSpeedChart = dynamic(() => import("@/frontend/components/vessel/CiiSpeedChart"), { ssr: false });
 
 const muted = "#8aa0c8";
 const panelBg = "rgba(11,18,34,0.82)";
@@ -31,10 +30,7 @@ const text = "#e7ecf5";
 const DASH = "—";
 
 function congestionColor(level: number): string {
-  const { low, medium } = BUSAN_PORT.congestionThresholds;
-  if (level <= low) return "#34d399";
-  if (level <= medium) return "#fbbf24";
-  return "#f87171";
+  return congestionDisplayColor(level);
 }
 
 // ── 공용 소품 ───────────────────────────────────────────────────────────
@@ -107,9 +103,7 @@ function kst(iso: string | null): string {
 export default function VesselPage() {
   const [activeTab, setActiveTab] = useState(0);
   const [plannedSpeed, setPlannedSpeed] = useState(11);
-  const [ships, setShips] = useState<Ship[]>([]);
-  const [portCalls, setPortCalls] = useState<PortCall[]>([]);
-  const [congestion, setCongestion] = useState<CongestionForecast | null>(null);
+  const [vesselData, setVesselData] = useState<VesselMonitorData | null>(null);
   const [weather, setWeather] = useState<WeatherForecast | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [now, setNow] = useState<Date>(() => new Date());
@@ -117,16 +111,12 @@ export default function VesselPage() {
   useEffect(() => {
     let active = true;
     async function load() {
-      const [s, pc, cg, wx] = await Promise.all([
-        fetch("/api/ships").then((r) => r.json()).catch(() => []),
-        fetch("/api/port-calls").then((r) => r.json()).catch(() => []),
-        fetch("/api/congestion").then((r) => r.json()).catch(() => null),
+      const [vessel, wx] = await Promise.all([
+        fetch("/api/vessel").then((r) => r.json()).catch(() => null),
         fetch("/api/weather").then((r) => r.json()).catch(() => null),
       ]);
       if (!active) return;
-      setShips(Array.isArray(s) ? s : []);
-      setPortCalls(Array.isArray(pc) ? pc : []);
-      setCongestion(cg && cg.forecast ? cg : null);
+      setVesselData(vessel && Array.isArray(vessel.items) ? vessel : null);
       setWeather(wx && wx.points ? wx : null);
       setNow(new Date());
     }
@@ -139,14 +129,11 @@ export default function VesselPage() {
   }, []);
 
   // 후보 목록(위치 매칭된 배 우선, 톤수 큰 순) — 상위 40척만 선택지로.
-  const candidates = useMemo<VesselCandidate[]>(() => monitorCandidates(ships, portCalls).slice(0, 40), [ships, portCalls]);
-  const candidate = candidates[selectedIdx] ?? candidates[0];
-  const view = useMemo(() => buildVesselView(candidate, now), [candidate, now]);
-  // CII: Required·등급경계는 IMO 표준식, Attained는 대표 프로파일 추정 (backend/prediction/cii.ts)
-  const cii = useMemo(
-    () => (view ? computeCiiStatus(view.type ?? undefined, view.grossTonnage ?? undefined, now.getFullYear()) : null),
-    [view, now]
-  );
+  const items = vesselData?.items ?? [];
+  const selectedItem = items[selectedIdx] ?? items[0] ?? null;
+  const view = selectedItem?.view ?? null;
+  // CII: Required·등급경계는 IMO 표준식, Attained는 서버에서 계산한 대표 프로파일 추정값.
+  const cii = selectedItem?.cii ?? null;
 
   // 현재 시각 기상(가장 가까운 예보 포인트)
   const wxPoint = useMemo(() => {
@@ -155,27 +142,17 @@ export default function VesselPage() {
     return weather.points.reduce((a, b) => (Math.abs(new Date(b.time).getTime() - t) < Math.abs(new Date(a.time).getTime() - t) ? b : a));
   }, [weather, now]);
 
-  const curve = useMemo(() => ciiCurveBySpeed(8, 13, 0.5), []);
   const selectedPt = useMemo(
-    () => curve.reduce((a, b) => (Math.abs(b.speed - plannedSpeed) < Math.abs(a.speed - plannedSpeed) ? b : a)),
-    [curve, plannedSpeed]
+    () => CII_CURVE_POINTS.reduce((a, b) => (Math.abs(b.speed - plannedSpeed) < Math.abs(a.speed - plannedSpeed) ? b : a)),
+    [plannedSpeed]
   );
 
-  const level = congestion?.currentLevel ?? 0;
+  const level = vesselData?.congestion.currentLevel ?? 0;
   const pos = view?.position ? posText(view.position.lat, view.position.lon) : null;
   const bf = wxPoint?.windSpeed != null ? beaufortFromWindMs(wxPoint.windSpeed) : null;
 
   // 감속 권고(JIT) — 항해 중 + 위치 있는 접근 선박에만. Port-MIS 실제 선종으로 정밀 계산.
-  const advisory = (() => {
-    if (!view || view.status !== "underway" || !view.position || view.speedKn == null || view.speedKn < 1) return null;
-    const distanceNm = haversineDistanceKm(view.position, BUSAN_PORT.center) / 1.852;
-    if (distanceNm < 5 || distanceNm > 800) return null; // 너무 가깝거나(입항 임박) 먼(무의미) 경우 제외
-    const inPortEquiv = level * BUSAN_PORT.portCallCapacity.portWide.p99; // 혼잡도 → 동시 재항 척수 환산
-    return recommendSpeed(
-      { vesselType: view.type ?? undefined, grossTonnage: view.grossTonnage ?? undefined, distanceNm, currentSpeedKn: view.speedKn, currentInPort: inPortEquiv },
-      BUSAN_PORT
-    );
-  })();
+  const advisory = selectedItem?.advisory ?? null;
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "#070c17", overflow: "hidden", fontFamily: "Pretendard, system-ui, sans-serif", color: text }}>
@@ -193,12 +170,12 @@ export default function VesselPage() {
                 onChange={(e) => setSelectedIdx(Number(e.target.value))}
                 style={{ fontSize: 15, fontWeight: 900, letterSpacing: "-.01em", color: text, background: "transparent", border: "none", cursor: "pointer", maxWidth: 220, outline: "none" }}
               >
-                {candidates.map((c, i) => (
+                {items.map((item, i) => (
                   <option key={i} value={i} style={{ background: "#0b1222", color: text }}>
-                    {c.call.vesselName}{c.ship ? " ⚓" : ""}
+                    {item.label}{item.hasMatchedShip ? " AIS" : ""}
                   </option>
                 ))}
-                {candidates.length === 0 && <option>불러오는 중…</option>}
+                {items.length === 0 && <option>Loading...</option>}
               </select>
               <div style={{ fontSize: 10.5, color: muted, fontWeight: 700 }}>{view?.type ?? DASH}{view?.nationality ? ` · ${view.nationality}` : ""}</div>
               <div style={{ fontSize: 10, color: muted, marginTop: 1 }}>
@@ -328,7 +305,7 @@ export default function VesselPage() {
           </Panel>
 
           {/* 선석 대기 예측 (실데이터) */}
-          <Panel title="선석 대기 예측" badge={congestion ? <span style={{ fontSize: 9.5, fontWeight: 800, color: "#34d399" }}>● 실시간</span> : undefined}>
+          <Panel title="선석 대기 예측" badge={vesselData ? <span style={{ fontSize: 9.5, fontWeight: 800, color: "#34d399" }}>● 실시간</span> : undefined}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 800 }}>
               <span>{view?.fromPort ?? DASH}</span>
               <span>{view?.toPort ?? DASH}</span>
@@ -344,7 +321,7 @@ export default function VesselPage() {
               <Cell label="혼잡도" value={`${Math.round(level * 100)}`} unit="%" accent={congestionColor(level)} />
             </div>
             <div style={{ marginTop: 8 }}>
-              <Cell label="현재 항만 혼잡 단계" value={congestionLabel(level, BUSAN_PORT.congestionThresholds)} accent={congestionColor(level)} />
+              <Cell label="현재 항만 혼잡 단계" value={congestionDisplayLabel(level)} accent={congestionColor(level)} />
             </div>
           </Panel>
 
@@ -386,16 +363,7 @@ export default function VesselPage() {
               <span style={{ marginLeft: "auto", fontSize: 10.5, color: muted }}>X축: 운항속도(KNOTS) · Y축: CII지수</span>
             </div>
             <div style={{ height: 200 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={curve} margin={{ top: 8, right: 16, bottom: 4, left: -12 }}>
-                  <CartesianGrid stroke="rgba(255,255,255,.06)" />
-                  <XAxis dataKey="speed" tick={{ fill: muted, fontSize: 10 }} stroke="rgba(255,255,255,.15)" />
-                  <YAxis tick={{ fill: muted, fontSize: 10 }} stroke="rgba(255,255,255,.15)" domain={[1, 3]} />
-                  <Tooltip contentStyle={{ background: "rgba(11,18,34,.95)", border, borderRadius: 8, fontSize: 12 }} labelStyle={{ color: muted }} formatter={(val: number) => [val.toFixed(3), "CII"]} labelFormatter={(l) => `${l} kn`} />
-                  <Line type="monotone" dataKey="cii" stroke="#facc15" strokeWidth={2.5} dot={false} />
-                  <ReferenceDot x={selectedPt.speed} y={selectedPt.cii} r={6} fill="#facc15" stroke="#070c17" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
+              <CiiSpeedChart data={CII_CURVE_POINTS} selectedPoint={selectedPt} />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 240 }}>

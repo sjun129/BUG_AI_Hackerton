@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import type { CongestionForecast, RegionCongestionSeries } from "@/backend/ports/port-types";
-import { BUSAN_PORT } from "@/backend/ports/seed-port";
+import type { CongestionForecast, RegionCongestionSeries } from "@/frontend/types/domain";
+import { BUSAN_DISPLAY_PORT, congestionDisplayColor, congestionDisplayLabel } from "@/frontend/config/ports";
 import LeftRail from "@/frontend/components/LeftRail";
 
 const muted = "#8aa0c8";
@@ -11,17 +11,11 @@ const border = "1px solid rgba(120,160,255,0.14)";
 const bg = "#070c18";
 
 function congestionColor(level: number): string {
-  const { low, medium } = BUSAN_PORT.congestionThresholds;
-  if (level <= low) return "#34d399";
-  if (level <= medium) return "#fbbf24";
-  return "#f87171";
+  return congestionDisplayColor(level);
 }
 
 function congestionLabel(level: number): string {
-  const { low, medium } = BUSAN_PORT.congestionThresholds;
-  if (level <= low) return "원활";
-  if (level <= medium) return "보통";
-  return "혼잡";
+  return congestionDisplayLabel(level);
 }
 
 const card: CSSProperties = {
@@ -131,7 +125,7 @@ export default function CongestionPage() {
         <div style={{ marginBottom: 6, fontSize: 11, fontWeight: 800, letterSpacing: ".12em", color: "#5b8cff" }}>
           CONGESTION DETAIL
         </div>
-        <h1 style={{ fontSize: 26, fontWeight: 800, margin: "0 0 4px" }}>{BUSAN_PORT.name} 혼잡도 상세</h1>
+        <h1 style={{ fontSize: 26, fontWeight: 800, margin: "0 0 4px" }}>{BUSAN_DISPLAY_PORT.name} 혼잡도 상세</h1>
         <p style={{ color: muted, fontSize: 13, margin: "0 0 20px" }}>
           시간대별 혼잡도는 해수부 연안AIS 통계(해역 밀도), 입항·출항 수치는 최근 {windowH}시간 Port-MIS 입출항 신고 기준입니다.
         </p>

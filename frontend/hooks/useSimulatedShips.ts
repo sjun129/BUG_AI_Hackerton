@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BUSAN_PORT } from "@/backend/ports/seed-port";
+import { DEFAULT_SIMULATION_DESTINATION_ID, SIMULATION_DESTINATION_PORTS } from "@/frontend/config/ports";
 import type { NewSimulatedShipInput, SimulatedShip } from "@/frontend/types/simulation";
 import { isSimulatedVesselType } from "@/frontend/types/simulation";
 
@@ -19,11 +19,11 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 function defaultDestinationPortId(): SimulatedShip["destinationPortId"] {
-  return BUSAN_PORT.simulationDestinations[0]?.id ?? "busan-north";
+  return DEFAULT_SIMULATION_DESTINATION_ID;
 }
 
 function normalizeDestinationPortId(value: unknown): SimulatedShip["destinationPortId"] {
-  return BUSAN_PORT.simulationDestinations.some((destination) => destination.id === value)
+  return SIMULATION_DESTINATION_PORTS.some((destination) => destination.id === value)
     ? (value as SimulatedShip["destinationPortId"])
     : defaultDestinationPortId();
 }

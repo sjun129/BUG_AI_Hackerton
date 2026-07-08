@@ -1,10 +1,11 @@
 "use client";
 
 import L from "leaflet";
+import { useMemo } from "react";
 import { MapContainer, Marker, Popup, TileLayer, Tooltip } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import type { BerthArea, PortCall, Ship } from "@/backend/ports/port-types";
-import { BUSAN_PORT } from "@/backend/ports/seed-port";
+import { BUSAN_DISPLAY_PORT, type DisplayBerthArea } from "@/frontend/config/ports";
+import type { PortCall, Ship } from "@/frontend/types/domain";
 import { BASEMAPS } from "./basemaps";
 
 const STATUS_COLOR: Record<Ship["status"], string> = {
@@ -40,7 +41,7 @@ function shipIcon(ship: Ship, selected: boolean): L.DivIcon {
 }
 
 // 부두별 정박선 수를 나타내는 라벨 버블(divIcon). 숫자가 클수록 크고 진하게.
-function berthAreaIcon(area: BerthArea, berthed: number, anchored: number): L.DivIcon {
+function berthAreaIcon(area: DisplayBerthArea, berthed: number, anchored: number): L.DivIcon {
   const total = berthed + anchored;
   const size = Math.min(56, 26 + total * 1.6);
   const color = anchored > berthed ? "#e8952b" : "#2f6bff"; // 묘박 우세면 주황, 접안 우세면 파랑
@@ -67,19 +68,29 @@ export default function ShipMap({ ships, selectedMmsi, onSelect, portCalls = [],
   const basemap = BASEMAPS.find((b) => b.id === basemapId) ?? BASEMAPS[0];
 
   // 부두별 접안/묘박 척수 집계
-  const areaStats = BUSAN_PORT.berthAreas
-    .map((area) => {
-      const calls = portCalls.filter((c) => c.berthAreaId === area.id);
-      const berthed = calls.filter((c) => c.berthType === "접안").length;
-      const anchored = calls.filter((c) => c.berthType === "묘박").length;
-      return { area, berthed, anchored, total: berthed + anchored };
-    })
-    .filter((s) => s.total > 0);
+  const areaStats = useMemo(() => {
+    const stats = new Map<string, { berthed: number; anchored: number }>();
+
+    for (const call of portCalls) {
+      if (!call.berthAreaId) continue;
+      const current = stats.get(call.berthAreaId) ?? { berthed: 0, anchored: 0 };
+      if (call.berthType === "접안") current.berthed += 1;
+      else if (call.berthType === "묘박") current.anchored += 1;
+      stats.set(call.berthAreaId, current);
+    }
+
+    return BUSAN_DISPLAY_PORT.berthAreas
+      .map((area) => {
+        const current = stats.get(area.id) ?? { berthed: 0, anchored: 0 };
+        return { area, ...current, total: current.berthed + current.anchored };
+      })
+      .filter((s) => s.total > 0);
+  }, [portCalls]);
 
   return (
     <div className="relative h-full w-full">
       <MapContainer
-        center={[BUSAN_PORT.center.lat, BUSAN_PORT.center.lon]}
+        center={[BUSAN_DISPLAY_PORT.center.lat, BUSAN_DISPLAY_PORT.center.lng]}
         zoom={11}
         zoomControl={false}
         className="h-full w-full"
@@ -91,7 +102,7 @@ export default function ShipMap({ ships, selectedMmsi, onSelect, portCalls = [],
 
       {/* 부두별 정박선 집계 마커 (Port-MIS 기반) */}
       {areaStats.map(({ area, berthed, anchored, total }) => (
-        <Marker key={area.id} position={[area.lat, area.lon]} icon={berthAreaIcon(area, berthed, anchored)}>
+        <Marker key={area.id} position={[area.lat, area.lng]} icon={berthAreaIcon(area, berthed, anchored)}>
           <Popup>
             <div className="text-sm">
               <p className="font-medium">{area.name}</p>

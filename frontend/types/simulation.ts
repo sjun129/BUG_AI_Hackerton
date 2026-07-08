@@ -1,9 +1,9 @@
-import type { SimulationDestinationPortId } from "@/backend/ports/port-types";
+import type { DisplayPortId } from "@/frontend/config/ports";
 
 export const SIMULATED_VESSEL_TYPES = ["container", "bulk", "tanker", "lng", "generalCargo"] as const;
 
 export type SimulatedVesselType = (typeof SIMULATED_VESSEL_TYPES)[number];
-export type { SimulationDestinationPortId };
+export type SimulationDestinationPortId = DisplayPortId;
 
 export interface SimulatedShip {
   id: string;

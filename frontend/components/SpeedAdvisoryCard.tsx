@@ -1,15 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Ship } from "@/backend/ports/port-types";
-import type { EnergyDecision, EnergyDecisionResult } from "@/backend/prediction/energy-decision";
+import type { EnergyDecision, EnergyDecisionApiResult } from "@/frontend/types/energy-decision";
 
 const muted = "#8aa0c8";
 const panel = "rgba(11,18,34,0.82)";
 const border = "1px solid rgba(120,160,255,0.14)";
 
 interface Props {
-  ships: Ship[];
   level: number;
 }
 
@@ -25,7 +23,7 @@ function kgToDisplay(kg: number): { value: string; unit: string } {
 }
 
 export default function SpeedAdvisoryCard({ level }: Props) {
-  const [data, setData] = useState<EnergyDecisionResult | null>(null);
+  const [data, setData] = useState<EnergyDecisionApiResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +38,7 @@ export default function SpeedAdvisoryCard({ level }: Props) {
           signal: controller.signal,
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        setData((await res.json()) as EnergyDecisionResult);
+        setData((await res.json()) as EnergyDecisionApiResult);
         setError(null);
       } catch (err) {
         if (!controller.signal.aborted) {
@@ -163,7 +161,7 @@ function EmptyState({
 }: {
   loading: boolean;
   error: string | null;
-  data: EnergyDecisionResult | null;
+  data: EnergyDecisionApiResult | null;
 }) {
   if (loading) {
     return (

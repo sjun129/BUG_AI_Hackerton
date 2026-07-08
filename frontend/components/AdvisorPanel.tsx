@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { AdvisorResult } from "@/backend/ports/port-types";
+import type { AdvisorResult } from "@/frontend/types/domain";
 
 type Message =
   | { role: "user"; text: string }

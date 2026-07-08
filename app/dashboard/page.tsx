@@ -2,15 +2,15 @@
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import type { CongestionForecast, PortCall, Ship } from "@/backend/ports/port-types";
-import { BUSAN_PORT } from "@/backend/ports/seed-port";
+import type { CongestionForecast, PortCall, Ship } from "@/frontend/types/domain";
+import { BUSAN_DISPLAY_PORT, congestionDisplayColor } from "@/frontend/config/ports";
 import VesselPanel from "@/frontend/components/VesselPanel";
 import AdvisorPanel from "@/frontend/components/AdvisorPanel";
 import SpeedAdvisoryCard from "@/frontend/components/SpeedAdvisoryCard";
 import LeftRail from "@/frontend/components/LeftRail";
 import { BASEMAPS, BASEMAP_STORAGE, initialBasemapId, type Basemap } from "@/frontend/components/basemaps";
 import { RIGHT_LEGEND_RIGHT } from "@/frontend/components/layout";
-import { filterShipsMatchingPortMis } from "@/backend/portmis/match-position";
+import { filterShipsMatchingPortMis } from "@/frontend/utils/match-position";
 
 // Leaflet은 window에 의존하므로 서버에서 렌더링하면 안 된다.
 const ShipMap = dynamic(() => import("@/frontend/components/ShipMap"), { ssr: false });
@@ -20,10 +20,7 @@ const panel = "rgba(11,18,34,0.82)";
 const border = "1px solid rgba(120,160,255,0.14)";
 
 function congestionColor(level: number): string {
-  const { low, medium } = BUSAN_PORT.congestionThresholds;
-  if (level <= low) return "#34d399";
-  if (level <= medium) return "#fbbf24";
-  return "#f87171";
+  return congestionDisplayColor(level);
 }
 
 // 상단 텔레메트리 바의 지표 한 칸
@@ -187,8 +184,18 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const berthed = portCalls.filter((c) => c.berthType === "접안").length;
-  const anchoredPm = portCalls.filter((c) => c.berthType === "묘박").length;
+  const portCallCounts = useMemo(
+    () =>
+      portCalls.reduce(
+        (acc, call) => {
+          if (call.berthType === "접안") acc.berthed += 1;
+          else if (call.berthType === "묘박") acc.anchoredPm += 1;
+          return acc;
+        },
+        { berthed: 0, anchoredPm: 0 }
+      ),
+    [portCalls]
+  );
   const level = congestion?.currentLevel ?? 0;
 
   // Port-MIS(공식 정박선)와 호출부호·선박명 유사도로 매칭되는 AIS 선박만 지도에 표시한다.
@@ -315,12 +322,12 @@ export default function DashboardPage() {
       >
         <div style={{ display: "flex", flexDirection: "column", marginRight: 4 }}>
           <span style={{ fontWeight: 900, fontSize: 15, letterSpacing: "-.01em" }}>PORTIQ</span>
-          <span style={{ fontSize: 10, color: muted, fontWeight: 700 }}>{BUSAN_PORT.name} 실시간 관제</span>
+          <span style={{ fontSize: 10, color: muted, fontWeight: 700 }}>{BUSAN_DISPLAY_PORT.name} 실시간 관제</span>
         </div>
         <div style={{ width: 1, height: 30, background: "rgba(255,255,255,.1)" }} />
         <Metric label="정박" value={String(portCalls.length)} unit="척" />
-        <Metric label="접안" value={String(berthed)} unit="척" accent="#34d399" />
-        <Metric label="묘박" value={String(anchoredPm)} unit="척" accent="#fbbf24" />
+        <Metric label="접안" value={String(portCallCounts.berthed)} unit="척" accent="#34d399" />
+        <Metric label="묘박" value={String(portCallCounts.anchoredPm)} unit="척" accent="#fbbf24" />
         <Metric label="AIS 위치" value={String(shownShips.length)} unit="척" accent="#38bdf8" />
         <div style={{ width: 1, height: 30, background: "rgba(255,255,255,.1)" }} />
         <Metric label="혼잡도" value={String(Math.round(level * 100))} unit="%" accent={congestionColor(level)} />
@@ -359,7 +366,7 @@ export default function DashboardPage() {
       )}
 
       {/* 좌상단 감속 권고 카드 (혼잡도 기반 JIT 연료저감) */}
-      {layers.advisory && <SpeedAdvisoryCard ships={shownShips} level={level} />}
+      {layers.advisory && <SpeedAdvisoryCard level={level} />}
 
       {/* 우측 선박 패널 */}
       {layers.vessels && <VesselPanel calls={portCalls} selectedKey={selectedVessel} onSelect={setSelectedVessel} />}

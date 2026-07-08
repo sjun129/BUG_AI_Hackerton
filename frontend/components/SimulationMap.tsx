@@ -3,7 +3,7 @@
 import L from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer, Tooltip, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { BUSAN_PORT } from "@/backend/ports/seed-port";
+import { BUSAN_DISPLAY_PORT, SIMULATION_DESTINATION_PORTS } from "@/frontend/config/ports";
 import type { SimulatedShip } from "@/frontend/types/simulation";
 import { SIMULATED_VESSEL_TYPE_LABELS } from "@/frontend/types/simulation";
 import { BASEMAPS } from "./basemaps";
@@ -75,13 +75,13 @@ const basemap = BASEMAPS.find((item) => item.id === "dark" && item.url) ?? BASEM
 export default function SimulationMap({ ships, simulationMode, onMapContextMenu }: SimulationMapProps) {
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", cursor: simulationMode ? "crosshair" : "default" }}>
-      <MapContainer center={[BUSAN_PORT.center.lat, BUSAN_PORT.center.lon]} zoom={11} zoomControl={false} className="h-full w-full">
+      <MapContainer center={[BUSAN_DISPLAY_PORT.center.lat, BUSAN_DISPLAY_PORT.center.lng]} zoom={11} zoomControl={false} className="h-full w-full">
         {basemap.url && <TileLayer attribution={basemap.attribution} url={basemap.url} />}
         <SimulationContextMenuHandler enabled={simulationMode} onMapContextMenu={onMapContextMenu} />
-        {BUSAN_PORT.simulationDestinations.map((destination) => (
+        {SIMULATION_DESTINATION_PORTS.map((destination) => (
           <Marker
             key={destination.id}
-            position={[destination.center.lat, destination.center.lon]}
+            position={[destination.center.lat, destination.center.lng]}
             icon={destinationIcon(destination.shortName)}
           >
             <Tooltip direction="top" offset={[0, -16]}>
@@ -98,7 +98,7 @@ export default function SimulationMap({ ships, simulationMode, onMapContextMenu 
         ))}
         {ships.map((ship) => (
           (() => {
-            const destination = BUSAN_PORT.simulationDestinations.find((item) => item.id === ship.destinationPortId) ?? BUSAN_PORT.simulationDestinations[0];
+            const destination = SIMULATION_DESTINATION_PORTS.find((item) => item.id === ship.destinationPortId) ?? SIMULATION_DESTINATION_PORTS[0];
             return (
           <Marker key={ship.id} position={[ship.lat, ship.lng]} icon={simIcon}>
             <Tooltip direction="top" offset={[0, -16]}>

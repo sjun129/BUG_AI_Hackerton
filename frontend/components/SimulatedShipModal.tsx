@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { BUSAN_PORT } from "@/backend/ports/seed-port";
+import { DEFAULT_SIMULATION_DESTINATION_ID, SIMULATION_DESTINATION_PORTS } from "@/frontend/config/ports";
 import type { NewSimulatedShipInput, SimulatedVesselType, SimulationDestinationPortId } from "@/frontend/types/simulation";
 import { SIMULATED_VESSEL_TYPE_LABELS, SIMULATED_VESSEL_TYPES } from "@/frontend/types/simulation";
 
@@ -48,7 +48,7 @@ export default function SimulatedShipModal({ open, position, defaultName, onCanc
     setSog("14");
     setVesselType("container");
     setGrossTonnage("80000");
-    setDestinationPortId(BUSAN_PORT.simulationDestinations[0]?.id ?? "busan-north");
+    setDestinationPortId(DEFAULT_SIMULATION_DESTINATION_ID);
     setError(null);
   }, [defaultName, open, position?.lat, position?.lng]);
 
@@ -158,7 +158,7 @@ export default function SimulatedShipModal({ open, position, defaultName, onCanc
           <label style={{ ...labelStyle, gridColumn: "1 / -1" }}>
             도착지
             <select value={destinationPortId} onChange={(event) => setDestinationPortId(event.target.value as SimulationDestinationPortId)} style={fieldStyle}>
-              {BUSAN_PORT.simulationDestinations.map((destination) => (
+              {SIMULATION_DESTINATION_PORTS.map((destination) => (
                 <option key={destination.id} value={destination.id}>
                   {destination.name}
                 </option>

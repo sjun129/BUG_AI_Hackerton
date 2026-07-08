@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { BerthType, PortCall } from "@/backend/ports/port-types";
+import type { BerthType, PortCall } from "@/frontend/types/domain";
 import { RIGHT_PANEL_RIGHT, RIGHT_PANEL_WIDTH } from "./layout";
 
 // MOVIDIK 스타일 우측 선박 패널 — 검색 + 필터 탭 + 선박 목록 + 선택 선박 상세 카드.
@@ -51,12 +51,19 @@ export default function VesselPanel({ calls, selectedKey, onSelect }: VesselPane
     });
   }, [calls, q, tab]);
 
-  const selected = calls.find((c) => vesselKey(c) === selectedKey) ?? null;
-  const counts = {
-    전체: calls.length,
-    접안: calls.filter((c) => c.berthType === "접안").length,
-    묘박: calls.filter((c) => c.berthType === "묘박").length,
-  };
+  const selected = useMemo(() => calls.find((c) => vesselKey(c) === selectedKey) ?? null, [calls, selectedKey]);
+  const counts = useMemo(
+    () =>
+      calls.reduce<Record<"전체" | BerthType, number>>(
+        (acc, call) => {
+          acc.전체 += 1;
+          if (call.berthType) acc[call.berthType] += 1;
+          return acc;
+        },
+        { 전체: 0, 접안: 0, 묘박: 0 }
+      ),
+    [calls]
+  );
 
   return (
     <div

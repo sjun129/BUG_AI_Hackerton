@@ -2,10 +2,12 @@
 
 import dynamic from "next/dynamic";
 import { useMemo, useState, type CSSProperties } from "react";
-import { BUSAN_PORT } from "@/backend/ports/seed-port";
+import { BUSAN_DISPLAY_PORT, SIMULATION_DESTINATION_PORTS } from "@/frontend/config/ports";
 import LeftRail from "@/frontend/components/LeftRail";
 import SimulatedShipModal from "@/frontend/components/SimulatedShipModal";
 import { useSimulatedShips } from "@/frontend/hooks/useSimulatedShips";
+import { useSimulationJit } from "@/frontend/hooks/useSimulationJit";
+import type { EnergyDecision } from "@/frontend/types/energy-decision";
 import type { NewSimulatedShipInput, SimulatedShip } from "@/frontend/types/simulation";
 import { SIMULATED_VESSEL_TYPE_LABELS } from "@/frontend/types/simulation";
 
@@ -15,76 +17,6 @@ const text = "#e7ecf5";
 const muted = "#8aa0c8";
 const panel = "rgba(11,18,34,0.86)";
 const border = "1px solid rgba(120,160,255,0.14)";
-
-interface SimulationDecision {
-  shipId?: string;
-  shipName: string;
-  source?: "simulation";
-  isSimulated?: boolean;
-  destinationPortId?: string;
-  destinationPortName?: string;
-  distanceNm: number;
-  currentSpeedKn: number;
-  recommendedSpeedKn: number;
-  idealJitSpeedKn: number;
-  currentEta: string;
-  recommendedEta: string;
-  currentCongestionLevel: number;
-  currentCongestionStatus: string;
-  recommendedCongestionLevel: number;
-  recommendedCongestionStatus: string;
-  congestionBasis: string;
-  currentWaitingMinutes: number;
-  optimizedWaitingMinutes: number;
-  reducedWaitingMinutes: number;
-  estimatedFuelSavedKg: number;
-  estimatedCo2ReducedKg: number;
-  confidence: string;
-  reasons?: string[];
-  calculationBasis?: string[];
-}
-
-interface SimulationEnergyResult {
-  mode?: "simulation";
-  congestionMode?: "dashboard-current" | "eta-forecast";
-  basis: string;
-  lastUpdated: string;
-  dashboardCongestion?: {
-    level: number;
-    status: string;
-    source?: string;
-    basis?: string;
-  };
-  destinationCongestion?: Record<string, { name: string; level: number; status: string; source?: string; basis: string }>;
-  decisions: SimulationDecision[];
-  summary: {
-    candidateCount: number;
-    recommendedCount: number;
-    totalReducedWaitingMinutes: number;
-    totalEstimatedFuelSavedKg: number;
-    totalEstimatedCo2ReducedKg: number;
-    byDestination?: Array<{
-      destinationPortId: string;
-      destinationPortName: string;
-      candidateCount: number;
-      recommendedCount: number;
-      totalReducedWaitingMinutes: number;
-      totalEstimatedFuelSavedKg: number;
-      totalEstimatedCo2ReducedKg: number;
-    }>;
-  };
-  emptyReason?: {
-    title: string;
-    description: string;
-    suggestions?: string[];
-  };
-  validation?: {
-    acceptedCount: number;
-    rejectedCount: number;
-    issues: Array<{ index: number | "simulatedShips"; message: string }>;
-  };
-  calculationNote?: string;
-}
 
 function nextDefaultName(ships: SimulatedShip[]): string {
   const maxNumber = ships.reduce((max, ship) => {
@@ -121,7 +53,7 @@ function formatKg(value: number): string {
 }
 
 function simulationDestinationName(destinationPortId: string | undefined): string {
-  return BUSAN_PORT.simulationDestinations.find((destination) => destination.id === destinationPortId)?.name ?? "부산항 북항";
+  return SIMULATION_DESTINATION_PORTS.find((destination) => destination.id === destinationPortId)?.name ?? "부산항 북항";
 }
 
 function destinationBasisLabel(basis: string): string {
@@ -175,14 +107,18 @@ export default function SimulationPage() {
   const { simulatedShips, hydrated, addSimulatedShip, removeSimulatedShip, clearSimulatedShips } = useSimulatedShips();
   const [simulationMode, setSimulationMode] = useState(true);
   const [pendingPosition, setPendingPosition] = useState<{ lat: number; lng: number } | null>(null);
-  const [jitResult, setJitResult] = useState<SimulationEnergyResult | null>(null);
-  const [jitLoading, setJitLoading] = useState(false);
-  const [jitError, setJitError] = useState<string | null>(null);
-  const [jitNotice, setJitNotice] = useState<string | null>(null);
+  const {
+    result: jitResult,
+    loading: jitLoading,
+    error: jitError,
+    notice: jitNotice,
+    runJitSimulation: requestJitSimulation,
+    resetSimulationJit,
+  } = useSimulationJit();
 
   const defaultName = useMemo(() => nextDefaultName(simulatedShips), [simulatedShips]);
   const decisionsByShipId = useMemo(() => {
-    const map = new Map<string, SimulationDecision>();
+    const map = new Map<string, EnergyDecision>();
     jitResult?.decisions.forEach((decision) => {
       if (decision.shipId) map.set(decision.shipId, decision);
     });
@@ -192,54 +128,22 @@ export default function SimulationPage() {
   function createShip(input: NewSimulatedShipInput) {
     addSimulatedShip(input);
     setPendingPosition(null);
-    setJitResult(null);
-    setJitError(null);
-    setJitNotice(null);
+    resetSimulationJit();
   }
 
   function removeShip(id: string) {
     removeSimulatedShip(id);
-    setJitResult(null);
-    setJitError(null);
-    setJitNotice(null);
+    resetSimulationJit();
   }
 
   function clearAll() {
     if (simulatedShips.length === 0) return;
     clearSimulatedShips();
-    setJitResult(null);
-    setJitError(null);
-    setJitNotice(null);
+    resetSimulationJit();
   }
 
   async function runJitSimulation() {
-    setJitError(null);
-    setJitNotice(null);
-    if (simulatedShips.length === 0) {
-      setJitNotice("가상 선박을 먼저 생성한 뒤 JIT 계산을 실행해주세요.");
-      return;
-    }
-
-    setJitLoading(true);
-    try {
-      const response = await fetch("/api/energy-decisions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "simulation", congestionMode: "dashboard-current", simulatedShips }),
-      });
-      if (!response.ok) {
-        throw new Error(`JIT 계산 요청 실패 (${response.status})`);
-      }
-      const result = (await response.json()) as SimulationEnergyResult;
-      setJitResult(result);
-      if (result.summary.recommendedCount === 0) {
-        setJitNotice(result.emptyReason?.description ?? "현재 생성된 가상 선박 기준으로 JIT 감속 권고가 없습니다.");
-      }
-    } catch (error) {
-      setJitError(error instanceof Error ? error.message : "JIT 계산 중 오류가 발생했습니다.");
-    } finally {
-      setJitLoading(false);
-    }
+    await requestJitSimulation(simulatedShips);
   }
 
   const shellStyle: CSSProperties = {
@@ -278,7 +182,7 @@ export default function SimulationPage() {
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <SimBadge />
-                  <span style={{ color: "#38bdf8", fontSize: 11, fontWeight: 900, letterSpacing: ".08em" }}>{BUSAN_PORT.name} 운영자 검토용</span>
+                  <span style={{ color: "#38bdf8", fontSize: 11, fontWeight: 900, letterSpacing: ".08em" }}>{BUSAN_DISPLAY_PORT.name} 운영자 검토용</span>
                 </div>
                 <h1 style={{ margin: "8px 0 0", fontSize: 26, lineHeight: 1.15, letterSpacing: "-.01em" }}>입항 시나리오 시뮬레이션</h1>
                 <p style={{ margin: "9px 0 0", color: "#c4d0ea", fontSize: 13.5, lineHeight: 1.55 }}>

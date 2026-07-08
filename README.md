@@ -61,3 +61,12 @@ http://localhost:3000/dashboard
   - `backend/advisor/` — LLM 프롬프트·응답 파싱
 
 자세한 설계 원칙은 [CLAUDE.md](CLAUDE.md) 참고.
+
+## 현재 페이지/API 구조
+
+- `/dashboard`: 실제 AIS/Supabase 선박, Port-MIS 혼잡도, JIT 감속 권고, AI 어드바이저를 표시합니다.
+- `/vessel`: 선박 목록과 상세 상태를 조회합니다.
+- `/simulation`: 브라우저 localStorage에 저장한 가상 선박으로 입항 시나리오를 구성하고 JIT 계산을 실행합니다. 실제 AIS/Port-MIS 선박과 섞지 않습니다.
+- `/congestion`: 부산항 권역별 혼잡도를 표시합니다.
+- `/api/energy-decisions` `GET`: 실제 선박과 Port-MIS 기반 혼잡도로 JIT 감속 권고를 계산합니다.
+- `/api/energy-decisions` `POST`: `/simulation`의 가상 선박 입력을 기준으로 JIT 감속 권고를 계산합니다.

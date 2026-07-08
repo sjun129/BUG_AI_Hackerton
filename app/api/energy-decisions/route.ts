@@ -1,42 +1,15 @@
-import { fetchShips } from "@/backend/ais/ship-source";
-import { resolveRegionalCongestion } from "@/backend/congestion/regional-congestion";
-import { computeCongestionForecast } from "@/backend/prediction/congestion";
-import { computeEnergyDecisions } from "@/backend/prediction/energy-decision";
-import { computeSimulationEnergyDecisions } from "@/backend/prediction/simulation-energy";
-import { fetchPortCongestion } from "@/backend/portmis/congestion-source";
-import { fetchPortCalls } from "@/backend/portmis/portcall-source";
-import { BUSAN_PORT } from "@/backend/ports/seed-port";
+import {
+  getLiveEnergyDecisions,
+  getSimulationEnergyDecisions,
+  type SimulationEnergyDecisionRequest,
+} from "@/backend/services/energy-decisions-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 
 export async function GET() {
-  const [ships, portCalls, portMisCongestion] = await Promise.all([
-    fetchShips(),
-    fetchPortCalls(),
-    fetchPortCongestion(),
-  ]);
-
-  const congestion = portMisCongestion ?? computeCongestionForecast(ships, BUSAN_PORT);
-  const result = computeEnergyDecisions({
-    ships,
-    congestion,
-    portCalls,
-    portConfig: BUSAN_PORT,
-  });
-  console.info("[energy-decisions]", {
-    candidateCount: result.summary.candidateCount,
-    recommendedCount: result.summary.recommendedCount,
-    etaForecastMatchedCount: result.summary.etaForecastMatchedCount,
-    currentLevelFallbackCount: result.summary.currentLevelFallbackCount,
-    isForecastStale: result.forecastFreshness.isStale,
-  });
-
-  return Response.json({
-    ...result,
-    isFallback: !portMisCongestion || result.isFallback,
-  });
+  return Response.json(await getLiveEnergyDecisions());
 }
 
 export async function POST(request: Request) {
@@ -47,41 +20,10 @@ export async function POST(request: Request) {
     body = null;
   }
 
-  const simulatedShips =
-    body && typeof body === "object" && "simulatedShips" in body
-      ? (body as { simulatedShips?: unknown }).simulatedShips
-      : [];
-  const congestionMode =
-    body && typeof body === "object" && "congestionMode" in body
-      ? (body as { congestionMode?: unknown }).congestionMode
-      : undefined;
+  const data =
+    body && typeof body === "object"
+      ? (body as Partial<SimulationEnergyDecisionRequest>)
+      : {};
 
-  const [portCalls, portMisCongestion, regionalCongestion] = await Promise.all([
-    fetchPortCalls(),
-    fetchPortCongestion(),
-    resolveRegionalCongestion(BUSAN_PORT),
-  ]);
-
-  const congestion = portMisCongestion ?? computeCongestionForecast([], BUSAN_PORT);
-  const result = computeSimulationEnergyDecisions({
-    simulatedShips,
-    congestionMode,
-    congestion,
-    portCalls,
-    regionalCongestion,
-    portConfig: BUSAN_PORT,
-  });
-
-  console.info("[energy-decisions:simulation]", {
-    candidateCount: result.summary.candidateCount,
-    recommendedCount: result.summary.recommendedCount,
-    acceptedCount: result.validation.acceptedCount,
-    rejectedCount: result.validation.rejectedCount,
-    isForecastStale: result.forecastFreshness.isStale,
-  });
-
-  return Response.json({
-    ...result,
-    isFallback: !portMisCongestion || result.isFallback,
-  });
+  return Response.json(await getSimulationEnergyDecisions({ simulatedShips: data.simulatedShips ?? [], congestionMode: data.congestionMode }));
 }
