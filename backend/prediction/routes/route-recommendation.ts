@@ -63,6 +63,19 @@ export interface RouteScenarioResult {
   reasons: string[];
   calculationBasis: string[];
   warnings: string[];
+  routePolyline: RoutePolyline;
+}
+
+export interface RoutePolylinePoint {
+  lat: number;
+  lng: number;
+  label?: string;
+}
+
+export interface RoutePolyline {
+  routeId: string;
+  routeName: string;
+  points: RoutePolylinePoint[];
 }
 
 export interface RouteScenarioShipResult {
@@ -241,6 +254,35 @@ function routesForDestination(portConfig: PortConfig, destinationPortId: Simulat
   return portConfig.approachRoutes.filter((route) => route.destinationPortId === destinationPortId);
 }
 
+function samePoint(a: RoutePolylinePoint | undefined, b: RoutePolylinePoint): boolean {
+  return Boolean(a) && Math.abs(a!.lat - b.lat) < 0.0001 && Math.abs(a!.lng - b.lng) < 0.0001;
+}
+
+function buildRoutePolyline(params: {
+  ship: EnergyDecisionShipInput;
+  route: ApproachRoute;
+  destination: SimulationDestinationPort;
+}): RoutePolyline {
+  const destinationPoint = {
+    lat: params.destination.center.lat,
+    lng: params.destination.center.lon,
+    label: params.destination.name,
+  };
+  const points: RoutePolylinePoint[] = [
+    { lat: params.ship.lat, lng: params.ship.lon, label: "선박 위치" },
+    ...params.route.waypoints,
+  ];
+  if (points.length === 1 || !samePoint(points[points.length - 1], destinationPoint)) {
+    points.push(destinationPoint);
+  }
+
+  return {
+    routeId: params.route.id,
+    routeName: params.route.name,
+    points,
+  };
+}
+
 export function scoreRouteScenario(params: {
   estimatedCo2Kg: number;
   estimatedWaitingMinutes: number;
@@ -351,12 +393,18 @@ function buildRouteScenario(params: {
     ],
     calculationBasis: [
       "route distance = current position -> predefined approach waypoints",
+      "routePolyline = map display only, not a navigational route",
       "waiting minutes = backend/data/energy estimateWaitingMinutesByCongestion()",
       "fuel kg = approach travel fuel estimate + expected waiting fuel",
       "CO2 kg = fuel kg * fuel emission factor",
       "MVP weighted comparison score = CO2*0.4 + waiting*0.3 + congestion*100*0.2 + distance*0.1",
     ],
     warnings,
+    routePolyline: buildRoutePolyline({
+      ship: params.ship,
+      route: params.route,
+      destination: params.destination,
+    }),
   };
 }
 

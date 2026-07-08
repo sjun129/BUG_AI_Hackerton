@@ -1,8 +1,13 @@
+import {
+  generateRouteScenarioAdvisor,
+  type RouteScenarioAdvisorResult,
+} from "@/backend/advisor/route-scenario-advisor";
 import { resolveRegionalCongestion } from "@/backend/congestion/regional-congestion";
 import { computeCongestionForecast } from "@/backend/prediction/congestion";
 import {
   computeRouteScenarioRecommendations,
   type RouteScenarioComputationResult,
+  type RouteScenarioShipResult,
 } from "@/backend/prediction/routes/route-recommendation";
 import { normalizeSimulatedShipsForDecision, type SimulationValidation } from "@/backend/prediction/simulation-energy";
 import { fetchPortCongestion } from "@/backend/portmis/congestion-source";
@@ -16,7 +21,13 @@ export interface RouteScenarioRequest {
   scenarioShips?: unknown;
 }
 
-export interface RouteScenarioServiceResult extends RouteScenarioComputationResult {
+export interface AdvisedRouteScenarioShipResult extends RouteScenarioShipResult {
+  advisor: RouteScenarioAdvisorResult;
+}
+
+export interface RouteScenarioServiceResult extends Omit<RouteScenarioComputationResult, "results"> {
+  advisorSource: RouteScenarioAdvisorResult["source"];
+  results: AdvisedRouteScenarioShipResult[];
   isFallback: boolean;
   dataSources: string[];
   validation: SimulationValidation;
@@ -43,16 +54,28 @@ export async function getRouteScenarios(input: RouteScenarioRequest): Promise<Ro
     portConfig: BUSAN_PORT,
     congestionMode: normalizeCongestionMode(input.congestionMode),
   });
+  const results = await Promise.all(
+    result.results.map(async (shipResult) => ({
+      ...shipResult,
+      advisor: await generateRouteScenarioAdvisor(shipResult),
+    }))
+  );
+  const advisorSource: RouteScenarioAdvisorResult["source"] = results.some((item) => item.advisor.source === "openai")
+    ? "openai"
+    : "rule-based-fallback";
 
   console.info("[route-scenarios:simulation]", {
     acceptedCount: validation.acceptedCount,
     rejectedCount: validation.rejectedCount,
     shipCount: result.summary.shipCount,
     recommendedCount: result.summary.recommendedCount,
+    advisorSource,
   });
 
   return {
     ...result,
+    advisorSource,
+    results,
     isFallback: !portMisCongestion,
     dataSources: [
       "scenario-ships",

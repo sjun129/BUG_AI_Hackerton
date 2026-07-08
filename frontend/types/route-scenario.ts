@@ -1,5 +1,38 @@
 import type { ScenarioShipSource } from "@/frontend/types/simulation";
 
+export interface RoutePolylinePoint {
+  lat: number;
+  lng: number;
+  label?: string;
+}
+
+export interface RoutePolyline {
+  routeId: string;
+  routeName: string;
+  points: RoutePolylinePoint[];
+}
+
+export interface RouteScenarioMapOverlay {
+  shipId: string;
+  routeId: string;
+  routeName: string;
+  isRecommended: boolean;
+  points: RoutePolylinePoint[];
+  distanceNm?: number;
+  eta?: string;
+  score?: number;
+}
+
+export interface RouteScenarioAdvisorResult {
+  source: "openai" | "rule-based-fallback";
+  summary: string;
+  recommendation: string;
+  comparison: string[];
+  reasons: string[];
+  risks: string[];
+  disclaimer: string;
+}
+
 export interface RouteScenario {
   routeId: string;
   routeName: string;
@@ -27,6 +60,7 @@ export interface RouteScenario {
   reasons: string[];
   calculationBasis: string[];
   warnings: string[];
+  routePolyline: RoutePolyline;
 }
 
 export interface RouteScenarioShipResult {
@@ -43,12 +77,14 @@ export interface RouteScenarioShipResult {
   recommendedRouteId?: string;
   recommendedRouteName?: string;
   recommendedRouteShortName?: string;
+  advisor?: RouteScenarioAdvisorResult;
   routeScenarios: RouteScenario[];
   warnings: string[];
 }
 
 export interface RouteScenarioResponse {
   source: "deterministic-route-scenario";
+  advisorSource?: RouteScenarioAdvisorResult["source"];
   mode: "simulation";
   basis: "predefined-approach-route-comparison";
   lastUpdated: string;

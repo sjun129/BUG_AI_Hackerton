@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import type { CongestionForecast, RegionCongestionSeries } from "../backend/ports/port-types";
 import { BUSAN_PORT } from "../backend/ports/seed-port";
+import { buildRouteScenarioFallbackAdvisor } from "../backend/advisor/route-scenario-advisor";
 import { computeRouteScenarioRecommendations } from "../backend/prediction/routes/route-recommendation";
 import { normalizeSimulatedShipsForDecision } from "../backend/prediction/simulation-energy";
 
@@ -68,6 +69,7 @@ const shipResult = result.results[0];
 assert.equal(shipResult.destinationPortId, "busan-new");
 assert.ok(shipResult.routeScenarios.length >= 2);
 assert.equal(shipResult.routeScenarios.filter((scenario) => scenario.isRecommended).length, 1);
+assert.ok(shipResult.routeScenarios.some((scenario) => scenario.isRecommended && scenario.routePolyline.points.length >= 2));
 
 const ranks = shipResult.routeScenarios.map((scenario) => scenario.rank);
 assert.deepEqual(ranks, [...ranks].sort((a, b) => a - b));
@@ -77,8 +79,18 @@ for (const scenario of shipResult.routeScenarios) {
   assert.ok(scenario.score > 0);
   assert.ok(Number.isFinite(scenario.estimatedFuelKg));
   assert.ok(Number.isFinite(scenario.estimatedCo2Kg));
+  assert.equal(scenario.routePolyline.routeId, scenario.routeId);
+  assert.equal(scenario.routePolyline.routeName, scenario.routeName);
+  assert.ok(scenario.routePolyline.points.length >= 2);
+  assert.ok(scenario.routePolyline.points.every((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng)));
   assert.ok(scenario.calculationBasis.some((basis) => basis.includes("MVP weighted comparison score")));
+  assert.ok(scenario.calculationBasis.some((basis) => basis.includes("map display only")));
   assert.ok(scenario.warnings.some((warning) => warning.includes("실제 항해 지시가 아닙니다")));
 }
+
+const fallbackAdvisor = buildRouteScenarioFallbackAdvisor(shipResult);
+assert.equal(fallbackAdvisor.source, "rule-based-fallback");
+assert.ok(fallbackAdvisor.disclaimer.includes("실제 항해 지시가 아닙니다"));
+assert.ok(fallbackAdvisor.risks.some((risk) => risk.includes("운영자가 확인")));
 
 console.log("route scenario validation passed");

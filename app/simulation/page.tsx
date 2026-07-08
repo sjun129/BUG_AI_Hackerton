@@ -11,6 +11,7 @@ import { useRouteScenarios } from "@/frontend/hooks/useRouteScenarios";
 import { useSimulatedShips } from "@/frontend/hooks/useSimulatedShips";
 import { useSimulationJit } from "@/frontend/hooks/useSimulationJit";
 import type { EnergyDecision } from "@/frontend/types/energy-decision";
+import type { RouteScenarioMapOverlay } from "@/frontend/types/route-scenario";
 import type { NewSimulatedShipInput, ScenarioShipSource, SimulatedShip } from "@/frontend/types/simulation";
 import { SIMULATED_VESSEL_TYPE_LABELS } from "@/frontend/types/simulation";
 
@@ -137,6 +138,23 @@ export default function SimulationPage() {
     });
     return map;
   }, [jitResult]);
+  const routeOverlays = useMemo<RouteScenarioMapOverlay[]>(() => {
+    if (!routeResult) return [];
+    return routeResult.results.flatMap((shipResult) =>
+      shipResult.routeScenarios
+        .filter((scenario) => scenario.routePolyline.points.length >= 2)
+        .map((scenario) => ({
+          shipId: shipResult.shipId ?? shipResult.shipName,
+          routeId: scenario.routeId,
+          routeName: scenario.routeName,
+          isRecommended: scenario.isRecommended,
+          points: scenario.routePolyline.points,
+          distanceNm: scenario.distanceNm,
+          eta: scenario.eta,
+          score: scenario.score,
+        }))
+    );
+  }, [routeResult]);
 
   function createShip(input: NewSimulatedShipInput) {
     addSimulatedShip(input);
@@ -182,7 +200,7 @@ export default function SimulationPage() {
 
       <div style={{ position: "absolute", inset: "16px 16px 16px 84px", display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 14 }}>
         <main style={{ position: "relative", minWidth: 0, border, borderRadius: 14, overflow: "hidden", background: "#0b1220" }}>
-          <SimulationMap ships={simulatedShips} simulationMode={simulationMode} onMapContextMenu={setPendingPosition} />
+          <SimulationMap ships={simulatedShips} simulationMode={simulationMode} onMapContextMenu={setPendingPosition} routeOverlays={routeOverlays} />
 
           <section
             style={{
