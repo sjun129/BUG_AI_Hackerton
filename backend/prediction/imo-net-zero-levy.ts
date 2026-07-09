@@ -106,11 +106,12 @@ export interface ImoNetZeroLevyInput {
   fuelType: ImoNzfFuelType; // LNG는 WtT 계수 미확정으로 미지원
   fuelConsumptionTon: number; // 산정 대상 기간(통상 연간 보고기간)의 총 연료 소비량
   grossTonnage: number; // 적용대상(5,000GT 이상) 판정용
+  isForeignGoing?: boolean; // 국제항해 선박 여부(기본 true). 자국 영해 내만 운항하는 내항선은 규정상 적용 제외.
   year: number; // 이행연도
 }
 
 export interface ImoNetZeroLevyResult {
-  applicable: boolean; // 5,000GT 이상이고 목표 확정 연도인지
+  applicable: boolean; // 5,000GT 이상 + 국제항해 + 목표 확정 연도인지
   attainedGfi: number | null; // gCO2eq/MJ — 선박의 달성 GFI(연료 WtW 원단위)
   targets: GfiTargets | null;
   energyMj: number | null; // 연료 소비량 → 에너지 환산(MJ)
@@ -146,13 +147,17 @@ function emptyResult(note: string): ImoNetZeroLevyResult {
 
 /**
  * IMO Net-Zero Framework 탄소부담금을 계산한다.
- * 1) 적용대상(5,000GT 이상) + 목표 확정 연도(2028~2035)인지 확인.
+ * 1) 적용대상(5,000GT 이상 + 국제항해) + 목표 확정 연도(2028~2035)인지 확인.
  * 2) 연료의 WtW GFI(달성치)를 계산해 그 해 Base/Direct Compliance 목표와 비교.
  * 3) 초과분을 Tier1/Tier2 부족톤수로 나누고, 가격이 확정된 기간(2028~2030)만 USD로 환산.
  */
 export function computeImoNetZeroLevy(input: ImoNetZeroLevyInput): ImoNetZeroLevyResult {
   if (input.grossTonnage < MIN_GT_APPLICABLE) {
     return emptyResult(`총톤수 ${MIN_GT_APPLICABLE.toLocaleString()}톤 미만은 IMO Net-Zero Framework 적용대상이 아닙니다(국제항해 선박만 해당).`);
+  }
+  const isForeignGoing = input.isForeignGoing ?? true;
+  if (!isForeignGoing) {
+    return emptyResult("자국 영해 내에서만 운항하는 내항선(국제항해 아님)은 IMO Net-Zero Framework 적용 제외 대상입니다.");
   }
 
   const targets = computeGfiTargets(input.year);

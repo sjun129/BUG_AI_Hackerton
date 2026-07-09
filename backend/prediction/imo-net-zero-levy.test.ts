@@ -35,7 +35,7 @@ import { computeFuelWtW, computeGfiTargets, computeImoNetZeroLevy } from "./imo-
   assert.equal(computeGfiTargets(2027), null, "2027년 이전은 목표 자체가 없음");
 }
 
-// ── 3) 적용대상 판정: 5,000GT 미만 제외, 목표 미확정 연도 제외 ──
+// ── 3) 적용대상 판정: 5,000GT 미만 제외, 목표 미확정 연도 제외, 내항선(비국제항해) 제외 ──
 {
   const small = computeImoNetZeroLevy({ fuelType: "MGO", fuelConsumptionTon: 1000, grossTonnage: 3000, year: 2028 });
   assert.equal(small.applicable, false, "5,000GT 미만은 적용대상 아님");
@@ -43,6 +43,13 @@ import { computeFuelWtW, computeGfiTargets, computeImoNetZeroLevy } from "./imo-
 
   const futureYear = computeImoNetZeroLevy({ fuelType: "MGO", fuelConsumptionTon: 1000, grossTonnage: 50000, year: 2040 });
   assert.equal(futureYear.applicable, false, "목표 미확정 연도는 계산 불가");
+
+  const coastal = computeImoNetZeroLevy({ fuelType: "MGO", fuelConsumptionTon: 1000, grossTonnage: 50000, isForeignGoing: false, year: 2028 });
+  assert.equal(coastal.applicable, false, "5,000GT 이상이어도 내항선(국제항해 아님)은 적용대상 아님");
+  assert.equal(coastal.totalLevyUsd, null);
+
+  const foreignDefault = computeImoNetZeroLevy({ fuelType: "MGO", fuelConsumptionTon: 1000, grossTonnage: 50000, year: 2028 });
+  assert.equal(foreignDefault.applicable, true, "isForeignGoing 미지정 시 기본값 true(국제항해로 간주)");
 }
 
 // ── 4) 화석연료(MGO/VLSFO)는 2028년 목표를 크게 초과 → Tier1+Tier2 모두 발생(실제 규정 의도와 일치:

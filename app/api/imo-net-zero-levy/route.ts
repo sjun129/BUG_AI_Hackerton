@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 // IMO Net-Zero Framework(2028년 실부과 시작) 탄소부담금 계산 엔드포인트 — 모델 탑재만.
 // 실제 화면 연동은 추후.
-//   GET /api/imo-net-zero-levy?gt=50000&fuel=MGO&fuelTon=1000&year=2028
+//   GET /api/imo-net-zero-levy?gt=50000&fuel=MGO&fuelTon=1000&year=2028&foreign=1
 //   응답: ImoNetZeroLevyResult (달성 GFI vs Base/Direct Compliance Target,
 //         Tier1/Tier2 부족톤수 + 부담금 USD(2028-2030만 가격 확정))
 export async function GET(request: Request) {
@@ -15,6 +15,7 @@ export async function GET(request: Request) {
   const fuelConsumptionTon = Number(params.get("fuelTon") ?? params.get("fuelConsumptionTon"));
   const yearRaw = params.get("year");
   const fuelRaw = (params.get("fuel") ?? "MGO").toUpperCase();
+  const foreignRaw = params.get("foreign");
 
   if (!Number.isFinite(grossTonnage) || grossTonnage <= 0) {
     return Response.json({ error: "gt(총톤수) 쿼리 파라미터가 필요합니다." }, { status: 400 });
@@ -34,6 +35,7 @@ export async function GET(request: Request) {
     fuelType: fuelRaw as ImoNzfFuelType,
     fuelConsumptionTon,
     grossTonnage,
+    isForeignGoing: foreignRaw != null ? foreignRaw !== "0" : undefined,
     year,
   });
   return Response.json(result);
