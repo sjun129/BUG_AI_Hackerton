@@ -24,6 +24,12 @@ export interface RouteScenarioMapOverlay {
   score?: number;
 }
 
+// 가상 기후 시나리오 적용 전(실측 기준) AI 경로 비교선 — 지도에서 적용 전/후를 한눈에 비교하는 용도.
+export interface RouteScenarioBaselineOverlay {
+  shipId: string;
+  points: RoutePolylinePoint[];
+}
+
 export interface RouteScenarioAdvisorResult {
   source: "openai" | "rule-based-fallback";
   summary: string;
@@ -50,6 +56,14 @@ export interface SeaRiskAssessment {
   factors: SeaRiskFactor[];
   basis: string[];
   dataAvailable: boolean;
+}
+
+// /simulation 가상 기후 시나리오 슬라이더 입력. enabled=false 면 실측 데이터를 그대로 쓴다.
+export interface ClimateOverrideInput {
+  enabled: boolean;
+  waveHeightM?: number; // 0~15m
+  windSpeedMs?: number; // 0~60m/s
+  typhoonDistanceKm?: number; // 0~500km, 미지정 시 가상 태풍 없음
 }
 
 export interface RouteScenario {
@@ -100,6 +114,8 @@ export interface RouteScenarioShipResult {
   advisor?: RouteScenarioAdvisorResult;
   routeScenarios: RouteScenario[];
   warnings: string[];
+  // 가상 기후 시나리오가 켜졌을 때만 존재 — "실측 데이터라면" AI 경로가 어땠을지 비교선.
+  baselineAiRoutePolyline?: RoutePolyline | null;
 }
 
 export interface RouteScenarioResponse {
@@ -111,6 +127,9 @@ export interface RouteScenarioResponse {
   calculationNote: string;
   seaRisk: SeaRiskAssessment;
   isFallback: boolean;
+  climateOverrideActive?: boolean;
+  climateOverrideInputs?: { waveHeightM?: number; windSpeedMs?: number; typhoonDistanceKm?: number };
+  climateOverrideTyphoon?: { lat: number; lon: number } | null;
   dataSources?: string[];
   results: RouteScenarioShipResult[];
   summary: {

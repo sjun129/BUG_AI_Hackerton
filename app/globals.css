@@ -112,6 +112,15 @@ body {
   animation: sim-route-flow 3.2s linear infinite;
 }
 
+@keyframes sim-typhoon-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.95; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+
+.simulation-typhoon-marker {
+  animation: sim-typhoon-pulse 1.8s ease-in-out infinite;
+}
+
 .portiq { font-family: "Pretendard", system-ui, -apple-system, sans-serif; }
 .portiq ::selection { background: #c9d9ff; }
 

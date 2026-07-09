@@ -47,6 +47,85 @@ function seaRiskColor(grade: SeaRiskGrade): string {
   }
 }
 
+function ClimateStatusBanner({
+  active,
+  inputs,
+}: {
+  active?: boolean;
+  inputs?: { waveHeightM?: number; windSpeedMs?: number; typhoonDistanceKm?: number };
+}) {
+  if (!active) {
+    return (
+      <div
+        style={{
+          borderRadius: 12,
+          border: `1px dashed ${LT.borderColor}`,
+          padding: "9px 11px",
+          color: muted,
+          fontSize: 11.5,
+          fontWeight: 700,
+          display: "flex",
+          alignItems: "center",
+          gap: 7,
+        }}
+      >
+        <span style={{ fontSize: 14 }}>📡</span>
+        실시간 해양 데이터 기준 (가상 시나리오 미적용)
+      </div>
+    );
+  }
+
+  const chips: Array<{ label: string; value: string }> = [];
+  if (inputs?.waveHeightM != null) chips.push({ label: "유의파고", value: `${inputs.waveHeightM.toFixed(1)}m` });
+  if (inputs?.windSpeedMs != null) chips.push({ label: "풍속", value: `${inputs.windSpeedMs.toFixed(1)}m/s` });
+  if (inputs?.typhoonDistanceKm != null) chips.push({ label: "가상 태풍 거리", value: `${Math.round(inputs.typhoonDistanceKm)}km` });
+
+  return (
+    <div
+      style={{
+        borderRadius: 12,
+        background: "linear-gradient(135deg, rgba(147,51,234,.14), rgba(147,51,234,.06))",
+        border: "1.5px solid rgba(147,51,234,.4)",
+        padding: 12,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <span style={{ fontSize: 16 }}>🌀</span>
+        <span style={{ color: "#7e22ce", fontSize: 13, fontWeight: 900, letterSpacing: "-.01em" }}>
+          가상 기후 시나리오가 적용되었습니다
+        </span>
+      </div>
+      {chips.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+          {chips.map((chip) => (
+            <span
+              key={chip.label}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                fontSize: 11,
+                fontWeight: 800,
+                color: "#7e22ce",
+                background: "rgba(255,255,255,.7)",
+                border: "1px solid rgba(147,51,234,.3)",
+                padding: "3px 9px",
+                borderRadius: 999,
+              }}
+            >
+              <span style={{ color: muted, fontWeight: 700 }}>{chip.label}</span>
+              {chip.value}
+            </span>
+          ))}
+        </div>
+      )}
+      <p style={{ margin: "8px 0 0", color: "#7e22ce", fontSize: 10.5, lineHeight: 1.4, opacity: 0.85 }}>
+        실시간 해양 데이터 대신 위 값으로 해상 리스크·AI 계산 경로를 다시 계산한 결과입니다.
+      </p>
+    </div>
+  );
+}
+
 function SeaRiskBanner({ seaRisk }: { seaRisk: SeaRiskAssessment }) {
   const color = seaRiskColor(seaRisk.grade);
   return (
@@ -206,6 +285,8 @@ export default function RouteScenarioResults({ result }: { result: RouteScenario
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingRight: 2 }}>
+      <ClimateStatusBanner active={result.climateOverrideActive} inputs={result.climateOverrideInputs} />
+
       <div style={{ borderRadius: 12, background: "rgba(22,163,74,.08)", padding: 11, color: "#15803d", fontSize: 12, lineHeight: 1.5 }}>
         계산 기준: 해수부 지정항로(항만가이드라인) 비교 · 추천 {result.summary.recommendedCount}척 / 입력 {result.summary.shipCount}척
         <br />

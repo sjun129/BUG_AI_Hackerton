@@ -339,6 +339,28 @@ function buildAiRoutePolyline(params: {
   return { routeId: AI_ROUTE_ID, routeName: AI_ROUTE_NAME, points: labeled };
 }
 
+/**
+ * AI 계산 경로 폴리라인만 단독으로 계산한다(점수·연료 등 나머지 계산 없이).
+ * /simulation 가상 기후 시나리오가 켜졌을 때, "실측 기준" 경로를 지도에 비교선으로
+ * 같이 보여주기 위한 용도 — computeRouteScenarioRecommendations 의 seaRisk/점수 계산과는
+ * 별개로, 순수하게 "이 태풍 목록을 주면 경로가 어떻게 그려지는지"만 필요할 때 쓴다.
+ */
+export function computeAiRoutePolylineForShip(params: {
+  ship: EnergyDecisionShipInput;
+  portConfig: PortConfig;
+  typhoons: TyphoonInfo[];
+}): RoutePolyline | null {
+  const destination = destinationFor(params.portConfig, params.ship.destinationPortId);
+  const destinationRoutes = routesForDestination(params.portConfig, destination.id);
+  if (destinationRoutes.length === 0) return null;
+  return buildAiRoutePolyline({
+    ship: params.ship,
+    destination,
+    typhoons: params.typhoons,
+    anchorWaypoints: destinationRoutes[0].waypoints,
+  });
+}
+
 export function scoreRouteScenario(params: {
   estimatedCo2Kg: number;
   estimatedWaitingMinutes: number;

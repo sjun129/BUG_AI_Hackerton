@@ -18,6 +18,7 @@ export async function POST(request: Request) {
       mode: data.mode,
       congestionMode: data.congestionMode,
       scenarioShips: data.scenarioShips ?? [],
+      climateOverride: data.climateOverride,
     })
   );
 }

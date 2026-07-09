@@ -2,10 +2,10 @@
 
 import { Fragment, type ReactNode, useEffect, useRef } from "react";
 import L from "leaflet";
-import { CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMapEvents } from "react-leaflet";
+import { Circle, CircleMarker, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { BUSAN_DISPLAY_PORT, SIMULATION_DESTINATION_PORTS } from "@/frontend/config/ports";
-import type { RouteScenarioMapOverlay, RoutePolylinePoint } from "@/frontend/types/route-scenario";
+import type { RouteScenarioBaselineOverlay, RouteScenarioMapOverlay, RoutePolylinePoint } from "@/frontend/types/route-scenario";
 import type { SimulatedShip } from "@/frontend/types/simulation";
 import { SIMULATED_VESSEL_TYPE_LABELS } from "@/frontend/types/simulation";
 import { BASEMAPS } from "./basemaps";
@@ -15,7 +15,13 @@ interface SimulationMapProps {
   simulationMode: boolean;
   onMapContextMenu: (position: { lat: number; lng: number }) => void;
   routeOverlays?: RouteScenarioMapOverlay[];
+  baselineRouteOverlays?: RouteScenarioBaselineOverlay[];
+  climateOverrideTyphoon?: { lat: number; lon: number } | null;
 }
+
+// AI 경로 계산이 실제로 회피하는 반경(backend/prediction/routes/typhoon-obstacle.ts 의
+// TYPHOON_AVOIDANCE_RADIUS_KM)과 맞춘다 — 지도에 그려지는 원이 실제 계산과 일치하도록.
+const TYPHOON_AVOIDANCE_RADIUS_M = 5000;
 
 function SimulationContextMenuHandler({
   enabled,
@@ -73,8 +79,22 @@ function destinationIcon(shortName: string): L.DivIcon {
   });
 }
 
+function typhoonIcon(): L.DivIcon {
+  const html = `
+    <div style="
+      width:40px;height:40px;border-radius:50%;
+      background:radial-gradient(circle, rgba(147,51,234,.92) 0%, rgba(147,51,234,.55) 65%, rgba(147,51,234,0) 100%);
+      border:2px solid #7e22ce;
+      display:flex;align-items:center;justify-content:center;
+      font-size:20px;
+      box-shadow:0 0 0 6px rgba(147,51,234,.18), 0 10px 24px rgba(0,0,0,.35);
+    ">🌀</div>`;
+  return L.divIcon({ html, className: "simulation-typhoon-marker", iconSize: [40, 40], iconAnchor: [20, 20] });
+}
+
 const simIcon = simulatedShipIcon("SIM");
 const snapshotIcon = simulatedShipIcon("SNAP");
+const typhoonMarkerIcon = typhoonIcon();
 // 대시보드와 동일한 밝은 배경(CARTO light) — 라이트 테마 시안에 맞춘다. 경로 폴리라인 디자인은 그대로 둔다.
 const basemap = BASEMAPS.find((item) => item.id === "light" && item.url) ?? BASEMAPS.find((item) => item.url) ?? BASEMAPS[0];
 
@@ -171,13 +191,69 @@ function waypointStyle(kind: "start" | "middle" | "end"): L.PathOptions {
   return { color: "#99f6e4", weight: 1.5, fillColor: "#22d3ee", fillOpacity: 0.88, className: "sim-route-waypoint" };
 }
 
-export default function SimulationMap({ ships, simulationMode, onMapContextMenu, routeOverlays = [] }: SimulationMapProps) {
+export default function SimulationMap({
+  ships,
+  simulationMode,
+  onMapContextMenu,
+  routeOverlays = [],
+  baselineRouteOverlays = [],
+  climateOverrideTyphoon,
+}: SimulationMapProps) {
   const overlays = routeOverlays.filter(validOverlay);
+  const baselineOverlays = baselineRouteOverlays.filter((overlay) => overlay.points.length >= 2);
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", cursor: simulationMode ? "crosshair" : "default" }}>
       <MapContainer center={[BUSAN_DISPLAY_PORT.center.lat, BUSAN_DISPLAY_PORT.center.lng]} zoom={11} zoomControl={false} className="h-full w-full">
         {basemap.url && <TileLayer attribution={basemap.attribution} url={basemap.url} />}
         <SimulationContextMenuHandler enabled={simulationMode} onMapContextMenu={onMapContextMenu} />
+        {baselineOverlays.map((overlay) => (
+          <Polyline
+            key={`baseline-${overlay.shipId}`}
+            positions={overlay.points.map((point) => [point.lat, point.lng] as [number, number])}
+            pathOptions={{ color: "#94a3b8", weight: 2.5, opacity: 0.85, dashArray: "3 7", lineCap: "round" }}
+          >
+            <Tooltip sticky>
+              <span style={{ fontWeight: 900 }}>실측 기준 AI 경로 (비교용)</span>
+            </Tooltip>
+            <Popup>
+              <div className="text-sm">
+                <p style={{ margin: "0 0 6px", fontWeight: 900, color: "#475569", letterSpacing: ".04em" }}>
+                  BASELINE (가상 시나리오 미적용 시)
+                </p>
+                <p style={{ margin: "3px 0", color: "#64748b", fontSize: 11 }}>
+                  실시간 해양 데이터(또는 태풍 없음) 기준으로 계산했을 때의 AI 경로입니다. 보라색 선(가상 시나리오
+                  적용 후)과 비교해보세요.
+                </p>
+              </div>
+            </Popup>
+          </Polyline>
+        ))}
+        {climateOverrideTyphoon && (
+          <>
+            <Circle
+              center={[climateOverrideTyphoon.lat, climateOverrideTyphoon.lon]}
+              radius={TYPHOON_AVOIDANCE_RADIUS_M}
+              pathOptions={{ color: "#9333ea", weight: 1.5, fillColor: "#9333ea", fillOpacity: 0.1, dashArray: "6 6" }}
+              interactive={false}
+            />
+            <Marker position={[climateOverrideTyphoon.lat, climateOverrideTyphoon.lon]} icon={typhoonMarkerIcon}>
+              <Tooltip sticky>
+                <span style={{ fontWeight: 900 }}>가상 시나리오 태풍</span>
+              </Tooltip>
+              <Popup>
+                <div className="text-sm">
+                  <p style={{ margin: "0 0 6px", fontWeight: 900, color: "#7e22ce", letterSpacing: ".04em" }}>
+                    SIMULATED TYPHOON (가상 시나리오)
+                  </p>
+                  <p style={{ margin: "3px 0", color: "#64748b", fontSize: 11 }}>
+                    슬라이더로 지정한 가상 태풍입니다. 점선 원(반경 {TYPHOON_AVOIDANCE_RADIUS_M / 1000}km)이 AI 계산 경로가
+                    실제로 회피하는 구역입니다. 실제 태풍이 아닙니다.
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          </>
+        )}
         {overlays.map((overlay) => {
           const positions = overlay.points.map((point) => [point.lat, point.lng] as [number, number]);
           const isAiRoute = overlay.routeSource === "ai-computed-route";
@@ -346,6 +422,12 @@ export default function SimulationMap({ ships, simulationMode, onMapContextMenu,
         <div style={{ display: "grid", gap: 5 }}>
           <span><b style={{ color: "#5eead4" }}>━━</b> 추천 경로</span>
           <span><b style={{ color: "#60a5fa" }}>┄┄</b> 후보 경로</span>
+          {overlays.some((o) => o.routeSource === "ai-computed-route") && (
+            <span><b style={{ color: "#c084fc" }}>━━</b> AI 계산 경로</span>
+          )}
+          {baselineOverlays.length > 0 && (
+            <span><b style={{ color: "#94a3b8" }}>┄┄</b> 실측 기준 비교선</span>
+          )}
           <span><b style={{ color: "#facc15" }}>SIM</b> 시뮬레이션 선박</span>
           <span><b style={{ color: "#38bdf8" }}>PORT</b> 도착 항만</span>
         </div>

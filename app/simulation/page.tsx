@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { BUSAN_DISPLAY_PORT, SIMULATION_DESTINATION_PORTS } from "@/frontend/config/ports";
 import LeftRail from "@/frontend/components/LeftRail";
+import ClimateOverridePanel from "@/frontend/components/simulation/ClimateOverridePanel";
 import LiveShipImportModal from "@/frontend/components/simulation/LiveShipImportModal";
 import RouteScenarioResults from "@/frontend/components/simulation/RouteScenarioResults";
 import SimulatedShipModal from "@/frontend/components/SimulatedShipModal";
@@ -12,7 +13,7 @@ import { useRouteScenarios } from "@/frontend/hooks/useRouteScenarios";
 import { useSimulatedShips } from "@/frontend/hooks/useSimulatedShips";
 import { useSimulationJit } from "@/frontend/hooks/useSimulationJit";
 import type { EnergyDecision } from "@/frontend/types/energy-decision";
-import type { RouteScenarioMapOverlay } from "@/frontend/types/route-scenario";
+import type { ClimateOverrideInput, RouteScenarioBaselineOverlay, RouteScenarioMapOverlay } from "@/frontend/types/route-scenario";
 import type { NewSimulatedShipInput, ScenarioShipSource, SimulatedShip } from "@/frontend/types/simulation";
 import { SIMULATED_VESSEL_TYPE_LABELS } from "@/frontend/types/simulation";
 
@@ -223,6 +224,7 @@ export default function SimulationPage() {
   const [simulationMode, setSimulationMode] = useState(true);
   const [pendingPosition, setPendingPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [liveImportOpen, setLiveImportOpen] = useState(false);
+  const [climateOverride, setClimateOverride] = useState<ClimateOverrideInput>({ enabled: false });
   const {
     result: jitResult,
     loading: jitLoading,
@@ -267,6 +269,16 @@ export default function SimulationPage() {
     );
   }, [routeResult]);
 
+  const baselineRouteOverlays = useMemo<RouteScenarioBaselineOverlay[]>(() => {
+    if (!routeResult) return [];
+    return routeResult.results
+      .filter((shipResult) => (shipResult.baselineAiRoutePolyline?.points.length ?? 0) >= 2)
+      .map((shipResult) => ({
+        shipId: shipResult.shipId ?? shipResult.shipName,
+        points: shipResult.baselineAiRoutePolyline!.points,
+      }));
+  }, [routeResult]);
+
   function createShip(input: NewSimulatedShipInput) {
     addSimulatedShip(input);
     setPendingPosition(null);
@@ -293,7 +305,7 @@ export default function SimulationPage() {
   }
 
   async function runRouteScenarios() {
-    await calculateRouteScenarios(simulatedShips);
+    await calculateRouteScenarios(simulatedShips, climateOverride);
   }
 
   const shellStyle: CSSProperties = {
@@ -311,7 +323,14 @@ export default function SimulationPage() {
 
       <div style={{ position: "absolute", inset: "16px 16px 16px 84px", display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(380px, 420px)", gap: 14 }}>
         <main style={{ position: "relative", minWidth: 0, border, borderRadius: 16, overflow: "hidden", background: panel, boxShadow: LT.shadow }}>
-          <SimulationMap ships={simulatedShips} simulationMode={simulationMode} onMapContextMenu={setPendingPosition} routeOverlays={routeOverlays} />
+          <SimulationMap
+            ships={simulatedShips}
+            simulationMode={simulationMode}
+            onMapContextMenu={setPendingPosition}
+            routeOverlays={routeOverlays}
+            baselineRouteOverlays={baselineRouteOverlays}
+            climateOverrideTyphoon={routeResult?.climateOverrideTyphoon}
+          />
 
           <section
             style={{
@@ -437,6 +456,9 @@ export default function SimulationPage() {
               desc="선택 도착지의 해수부 지정항로(항만가이드라인)를 거리·혼잡도·예상 대기·연료·CO₂ 기준으로 비교합니다. JIT는 감속 권고, 경로 추천은 지정항로 비교입니다."
               action={<RunButton label={routeLoading ? "계산 중" : "경로 추천 계산"} onClick={runRouteScenarios} disabled={routeLoading} tone="green" />}
             />
+            <div style={{ marginTop: 12 }}>
+              <ClimateOverridePanel value={climateOverride} onChange={setClimateOverride} />
+            </div>
             {routeError && <div style={{ marginTop: 10, color: LT.red, fontSize: 12, fontWeight: 700 }}>{routeError}</div>}
             {routeNotice && <div style={{ marginTop: 10, color: "#9a6a12", fontSize: 12, lineHeight: 1.45 }}>{routeNotice}</div>}
             {routeResult?.validation && routeResult.validation.rejectedCount > 0 && (
