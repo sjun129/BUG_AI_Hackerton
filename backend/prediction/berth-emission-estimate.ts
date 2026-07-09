@@ -21,6 +21,13 @@
 import { CO2_FACTOR_TON, hotelingFuelRate, type FuelType } from "./fuel";
 import { computeCo2eqTon, type ImoNzfFuelType } from "./imo-net-zero-levy";
 
+// 이 모델을 어디서 쓰든 항상 같은 문구로 노출한다 — 연료소비량이 근사치라는 사실을
+// 결과에서 빼먹을 수 없게(disclaimer 필드가 항상 채워짐) 강제한다.
+export const BERTH_EMISSION_DISCLAIMER =
+  "이 추정치는 공식 검증된 수치가 아닙니다. 배출계수(연료→CO2eq 환산)는 IMO 실측 국제표준이지만, " +
+  "연료소비량(선종·톤수별 접안 중 kg/h)은 IMO Fourth GHG Study 2020 Table 17/18 원본을 확보하지 " +
+  "못해 자체 근사치를 씁니다. 최종 tCO2eq 수치를 공식 자료로 인용하지 마세요.";
+
 export interface BerthEmissionEstimateInput {
   vesselType?: string; // 선종명(Port-MIS vsslKndNm)
   grossTonnage?: number; // 총톤수
@@ -41,6 +48,7 @@ export interface BerthEmissionEstimate {
   co2eqTon: number; // emissionBasis에 따라 WtW CO2eq 또는 TtW CO2
   emissionBasis: BerthEmissionBasis;
   note: string;
+  disclaimer: string; // 항상 채워짐 — BERTH_EMISSION_DISCLAIMER 참고
 }
 
 function round(value: number, digits = 2): number {
@@ -84,5 +92,6 @@ export function estimateBerthEmission(input: BerthEmissionEstimateInput): BerthE
     co2eqTon: round(co2eqTon, 2),
     emissionBasis,
     note,
+    disclaimer: BERTH_EMISSION_DISCLAIMER,
   };
 }

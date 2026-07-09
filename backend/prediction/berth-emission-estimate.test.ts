@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { hotelingFuelRate, CO2_FACTOR_TON } from "./fuel";
 import { computeCo2eqTon } from "./imo-net-zero-levy";
-import { estimateBerthEmission } from "./berth-emission-estimate";
+import { BERTH_EMISSION_DISCLAIMER, estimateBerthEmission } from "./berth-emission-estimate";
 
 // ── 1) 연료소비량은 fuel.ts hotelingFuelRate와 정확히 일치(재사용 확인) ──
 {
@@ -47,6 +47,16 @@ import { estimateBerthEmission } from "./berth-emission-estimate";
   const small = estimateBerthEmission({ vesselType: "컨테이너선", grossTonnage: 15000, berthHours: 24 });
   const large = estimateBerthEmission({ vesselType: "컨테이너선", grossTonnage: 90000, berthHours: 24 });
   assert.ok(large.co2eqTon > small.co2eqTon, "총톤수 클수록 배출량 큼");
+}
+
+// ── 6) 결과에는 항상 disclaimer가 채워진다(호출부가 빼먹을 수 없게) — LNG·화석연료 모두 확인 ──
+{
+  const fossil = estimateBerthEmission({ vesselType: "컨테이너선", grossTonnage: 50000, berthHours: 24 });
+  const lng = estimateBerthEmission({ vesselType: "LNG운반선", grossTonnage: 90000, berthHours: 24 });
+  assert.equal(fossil.disclaimer, BERTH_EMISSION_DISCLAIMER, "화석연료 케이스도 disclaimer 포함");
+  assert.equal(lng.disclaimer, BERTH_EMISSION_DISCLAIMER, "LNG 케이스도 disclaimer 포함");
+  assert.ok(fossil.disclaimer.includes("근사치"), "disclaimer가 근사치임을 명시");
+  assert.ok(fossil.disclaimer.length > 0);
 }
 
 console.log("berth-emission-estimate validation passed");
