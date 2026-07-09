@@ -16,9 +16,10 @@ import { BUSAN_PORT } from "../ports/seed-port";
 import { computePortCongestion } from "../prediction/congestion";
 import { fetchBusanEntriesByDay, fetchBusanPortMisEntries } from "./client";
 import { matchEnrichment } from "./enrich";
-import { toPortCall, isCurrentlyInPort, mergeByVessel } from "./portcalls";
+import { toPortCall, isCurrentlyInPort, mergeByVessel, countRecentActivity } from "./portcalls";
 import { portCallToRow } from "./portcall-source";
 import { savePortCongestion } from "./congestion-source";
+import { savePortCallActivity, ACTIVITY_WINDOW_HOURS } from "./activity-source";
 
 const SERVICE_KEY = process.env.MOF_SHIP_OPERATION_KEY;
 // 이 기간 안에 입항해서 아직 출항 안 한 배를 "현재 정박 중"으로 본다. 하루 단위로 훑으므로
@@ -54,7 +55,8 @@ async function main() {
   // 1) 현재 정박 중(입항 후 미출항)인 선박만 골라 port_calls를 통째로 교체한다.
   //    port_calls는 "지금 항내에 있는 배" 스냅샷이라, 지난번에 정박했다가 이미 떠난 배는
   //    남아있으면 안 된다. 그래서 upsert가 아니라 전체 삭제 후 삽입으로 스냅샷을 갈아끼운다.
-  const inPort = items.filter(isCurrentlyInPort);
+  const snapshotNow = new Date();
+  const inPort = items.filter((item) => isCurrentlyInPort(item, snapshotNow));
   const callMap = new Map<string, ReturnType<typeof portCallToRow>>();
   for (const item of inPort) {
     const row = portCallToRow(toPortCall(item));
@@ -69,19 +71,30 @@ async function main() {
   if (insErr) console.error("[enrich-portmis] port_calls 삽입 실패:", insErr.message);
   else console.log(`[enrich-portmis] 현재 정박 중 ${callRows.length}척 저장 (선박 ${items.length}척 중)`);
 
-  // 2) Port-MIS 기반 혼잡도 — 모든 입항 detail의 입항시각으로 시간대별 밀도를 계산해 저장한다.
+  // 2) 최근 24시간 부두별 입·출항 신고 집계 — port_calls엔 출항한 배가 안 남으므로
+  //    (전부 event="입항"), 지역별 입·출항 건수는 이 스냅샷에 따로 저장한다.
+  const activity = countRecentActivity(items, BUSAN_PORT, snapshotNow, ACTIVITY_WINDOW_HOURS);
+  let arr = 0, dep = 0;
+  for (const a of activity.values()) { arr += a.arrivals; dep += a.departures; }
+  console.log(`[enrich-portmis] 최근 ${ACTIVITY_WINDOW_HOURS}시간 입항 ${arr}건·출항 ${dep}건 (부두 ${activity.size}곳)`);
+  const actSaved = await savePortCallActivity(activity);
+  if (!actSaved.ok) console.error("[enrich-portmis] 입·출항 집계 저장 실패:", actSaved.error);
+
+  // 3) Port-MIS 기반 혼잡도 — 모든 입항 detail의 입항시각으로 시간대별 밀도를 계산해 저장한다.
   const arrivalTimes: string[] = [];
   for (const it of items) {
     for (const d of it.details) {
       if (d.etryndNm === "입항" && d.etryptDt) arrivalTimes.push(d.etryptDt);
     }
   }
-  const congestion = computePortCongestion(arrivalTimes, BUSAN_PORT);
+  const congestion = computePortCongestion(arrivalTimes, BUSAN_PORT, snapshotNow, {
+    currentInPortCount: callRows.length,
+  });
   const saved = await savePortCongestion(congestion);
   if (!saved.ok) console.error("[enrich-portmis] 혼잡도 저장 실패:", saved.error);
   else console.log(`[enrich-portmis] 혼잡도 저장 (현재 ${Math.round(congestion.currentLevel * 100)}%, ${congestion.forecast.length}구간)`);
 
-  // 3) AIS ships 보강
+  // 4) AIS ships 보강
   const ships = await fetchShips();
   console.log(`[enrich-portmis] 현재 선박 ${ships.length}척과 매칭 시도`);
 

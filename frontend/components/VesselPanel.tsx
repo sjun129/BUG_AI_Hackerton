@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { BerthType, PortCall } from "@/backend/ports/port-types";
+import type { BerthType, PortCall } from "@/frontend/types/domain";
+import { RIGHT_PANEL_RIGHT, RIGHT_PANEL_WIDTH } from "./layout";
+import { LT } from "./theme";
 
 // MOVIDIK 스타일 우측 선박 패널 — 검색 + 필터 탭 + 선박 목록 + 선택 선박 상세 카드.
 // 데이터는 Port-MIS 정박선(PortCall). 실시간 위경도/속력은 AIS 쪽(지도)에 있고, 여기선
@@ -11,12 +13,12 @@ function vesselKey(c: PortCall): string {
   return `${c.callSign}|${c.vesselName}`;
 }
 
-const BERTH_COLOR: Record<BerthType, string> = { 접안: "#34d399", 묘박: "#fbbf24" };
+const BERTH_COLOR: Record<BerthType, string> = { 접안: LT.green, 묘박: LT.amber };
 
-const panelBg = "rgba(11,18,34,0.82)";
-const border = "1px solid rgba(120,160,255,0.14)";
-const muted = "#8aa0c8";
-const ink = "#e7ecf5";
+const panelBg = LT.panel;
+const border = LT.border;
+const muted = LT.muted;
+const ink = LT.ink;
 
 function fmt(v: string | number | undefined | null, suffix = ""): string {
   if (v === undefined || v === null || v === "") return "-";
@@ -50,22 +52,29 @@ export default function VesselPanel({ calls, selectedKey, onSelect }: VesselPane
     });
   }, [calls, q, tab]);
 
-  const selected = calls.find((c) => vesselKey(c) === selectedKey) ?? null;
-  const counts = {
-    전체: calls.length,
-    접안: calls.filter((c) => c.berthType === "접안").length,
-    묘박: calls.filter((c) => c.berthType === "묘박").length,
-  };
+  const selected = useMemo(() => calls.find((c) => vesselKey(c) === selectedKey) ?? null, [calls, selectedKey]);
+  const counts = useMemo(
+    () =>
+      calls.reduce<Record<"전체" | BerthType, number>>(
+        (acc, call) => {
+          acc.전체 += 1;
+          if (call.berthType) acc[call.berthType] += 1;
+          return acc;
+        },
+        { 전체: 0, 접안: 0, 묘박: 0 }
+      ),
+    [calls]
+  );
 
   return (
     <div
       style={{
         position: "absolute",
         top: 16,
-        right: 16,
+        right: RIGHT_PANEL_RIGHT, // 우측 세로 툴바(레일) 자리를 비운다
         bottom: 16,
-        width: 372,
-        maxWidth: "calc(100vw - 32px)",
+        width: RIGHT_PANEL_WIDTH,
+        maxWidth: `calc(100vw - ${RIGHT_PANEL_RIGHT + 32}px)`,
         zIndex: 500,
         display: "flex",
         flexDirection: "column",
@@ -73,7 +82,7 @@ export default function VesselPanel({ calls, selectedKey, onSelect }: VesselPane
         backdropFilter: "blur(14px)",
         border,
         borderRadius: 16,
-        boxShadow: "0 20px 50px rgba(0,0,0,.5)",
+        boxShadow: LT.shadow,
         color: ink,
         overflow: "hidden",
         fontFamily: "Pretendard, system-ui, sans-serif",
@@ -86,7 +95,7 @@ export default function VesselPanel({ calls, selectedKey, onSelect }: VesselPane
             display: "flex",
             alignItems: "center",
             gap: 8,
-            background: "rgba(255,255,255,.05)",
+            background: LT.tile,
             border,
             borderRadius: 10,
             padding: "9px 12px",
@@ -117,14 +126,14 @@ export default function VesselPanel({ calls, selectedKey, onSelect }: VesselPane
                 onClick={() => setTab(t)}
                 style={{
                   flex: 1,
-                  border: active ? "1px solid #38bdf8" : border,
-                  background: active ? "rgba(56,189,248,.14)" : "transparent",
-                  color: active ? "#7dd3fc" : muted,
+                  border: "none",
+                  background: active ? LT.blue : LT.tile,
+                  color: active ? "#fff" : muted,
                   fontFamily: "inherit",
                   fontSize: 12,
                   fontWeight: 700,
-                  padding: "6px 0",
-                  borderRadius: 8,
+                  padding: "7px 0",
+                  borderRadius: 9,
                   cursor: "pointer",
                 }}
               >
@@ -158,8 +167,8 @@ export default function VesselPanel({ calls, selectedKey, onSelect }: VesselPane
                   gap: 10,
                   padding: "10px 10px",
                   marginBottom: 6,
-                  border: isSel ? "1px solid #38bdf8" : border,
-                  background: isSel ? "rgba(56,189,248,.10)" : "rgba(255,255,255,.03)",
+                  border: isSel ? `1px solid ${LT.blue}` : border,
+                  background: isSel ? LT.blueSoft : LT.tile,
                   borderRadius: 10,
                   cursor: "pointer",
                   fontFamily: "inherit",
@@ -171,7 +180,7 @@ export default function VesselPanel({ calls, selectedKey, onSelect }: VesselPane
                     width: 34,
                     height: 34,
                     borderRadius: 8,
-                    background: "rgba(255,255,255,.06)",
+                    background: LT.tile,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -194,8 +203,13 @@ export default function VesselPanel({ calls, selectedKey, onSelect }: VesselPane
                     fontSize: 11,
                     fontWeight: 800,
                     color,
-                    background: "rgba(255,255,255,.06)",
-                    padding: "3px 8px",
+                    background:
+                      c.berthType === "접안"
+                        ? "rgba(22,163,74,.12)"
+                        : c.berthType === "묘박"
+                          ? "rgba(232,149,43,.14)"
+                          : LT.tile,
+                    padding: "4px 10px",
                     borderRadius: 999,
                     flex: "none",
                   }}
@@ -218,7 +232,7 @@ function StatCell({ label, value, accent }: { label: string; value: string; acce
   return (
     <div
       style={{
-        background: "rgba(255,255,255,.04)",
+        background: LT.tile,
         border,
         borderRadius: 10,
         padding: "8px 10px",
@@ -231,19 +245,19 @@ function StatCell({ label, value, accent }: { label: string; value: string; acce
 }
 
 function VesselDetail({ c }: { c: PortCall }) {
-  const color = c.berthType === "묘박" ? "#fbbf24" : "#34d399";
+  const color = c.berthType === "묘박" ? LT.amber : LT.green;
   return (
     <div
       style={{
         margin: "0 2px 10px",
         padding: "12px",
         borderRadius: 12,
-        background: "rgba(20,30,54,.6)",
-        border: "1px solid rgba(120,160,255,.2)",
+        background: "#f8fafc",
+        border: `1px solid ${LT.blueSoft}`,
       }}
     >
       {/* 선박 제원 */}
-      <div style={{ fontSize: 11, fontWeight: 800, color: "#7dd3fc", letterSpacing: ".06em", marginBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: LT.blue, letterSpacing: ".06em", marginBottom: 8 }}>
         선박 제원
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -261,10 +275,10 @@ function VesselDetail({ c }: { c: PortCall }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 800 }}>{c.previousPort ?? "-"}</span>
-          <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,.12)", borderRadius: 2, position: "relative" }}>
+          <div style={{ flex: 1, height: 3, background: "rgba(15,23,42,.10)", borderRadius: 2, position: "relative" }}>
             <div style={{ position: "absolute", inset: 0, width: "100%", background: `linear-gradient(90deg,${color},transparent)`, borderRadius: 2 }} />
           </div>
-          <span style={{ fontSize: 13, fontWeight: 800, color: "#7dd3fc" }}>부산항</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: LT.blue }}>부산항</span>
         </div>
         {c.nextPort && (
           <div style={{ fontSize: 11.5, color: muted, marginTop: 4 }}>다음 기항지: {c.nextPort}</div>

@@ -4,6 +4,7 @@
 // 이 파일이 내보내는 BUSAN_PORT 를 읽어서 동작할 뿐, 좌표·임계값을 직접 갖지 않는다.
 
 import type { PortConfig } from "./port-types";
+import { BUSAN_GUIDELINE_APPROACH_ROUTES } from "./busan-guideline-routes";
 
 export const BUSAN_PORT: PortConfig = {
   name: "부산항",
@@ -53,4 +54,107 @@ export const BUSAN_PORT: PortConfig = {
   // (Port-MIS 혼잡도) 부산항 전체(북항·신항·감천·다대포) 시간당 입항 신고가 이 건수면 포화(=1).
   // 실측 분포상 시간당 입항이 1~13건, 평시 5~7건이라 피크가 혼잡으로 뜨도록 12로 둔다.
   arrivalCapacityPerHour: 12,
+
+  // (해수부 연안AIS 통계 혼잡도) 32km bbox(mockAreaRadiusKm) 안 시간당 AIS 척수를 level=1로 볼 기준.
+  // 2024 실측(gicoms WFS small_ship_stats_view)상 이 구역 시간당 척수가 ~1400~1660이라, 피크가
+  // 혼잡(≈0.8)으로 뜨도록 2000으로 둔다. bbox 크기에 종속된 값이라 반경이 바뀌면 재보정 필요.
+  aisStatsHourlyCapacity: 2000,
+
+  // 지역별 혼잡도 분할.
+  //  - 시간대별 곡선: AIS 통계를 center±radiusKm bbox로 조회 → aisHourlyCapacity 로 정규화.
+  //  - 입출항 수치: Port-MIS berthAreaId 집계.
+  // aisHourlyCapacity 는 2024 실측(소해구도 시간당 척수) 기반 근사: 북항·감천 셀 피크 ~875,
+  // 신항 셀 ~167. ⚠️ 북항·감천은 같은 AIS 셀이라 aisSeparable=false(곡선 유사).
+  congestionRegions: [
+    {
+      id: "busan",
+      name: "부산(북항)",
+      center: { lat: 35.09, lon: 129.07 },
+      radiusKm: 6,
+      aisHourlyCapacity: 1100,
+      aisSeparable: false,
+      berthAreaIds: ["bukhang", "sinseondae", "gamman", "uam", "namhang", "yeongdo", "yongho", "anchorage"],
+      isDefault: true,
+    },
+    {
+      id: "gamcheon",
+      name: "감천항",
+      center: { lat: 35.078, lon: 129.01 },
+      radiusKm: 4,
+      aisHourlyCapacity: 1100,
+      aisSeparable: false,
+      berthAreaIds: ["gamcheon", "dadaepo"],
+    },
+    {
+      id: "sinhang",
+      name: "부산신항",
+      center: { lat: 35.081, lon: 128.79 },
+      radiusKm: 8,
+      aisHourlyCapacity: 250,
+      aisSeparable: true,
+      berthAreaIds: ["sinhang"],
+    },
+  ],
+
+  simulationDestinations: [
+    {
+      id: "busan-north",
+      name: "부산항 북항",
+      shortName: "북항",
+      center: { lat: 35.09, lon: 129.07 },
+      congestionRegionId: "busan",
+    },
+    {
+      id: "gamcheon",
+      name: "감천항",
+      shortName: "감천",
+      center: { lat: 35.078, lon: 129.01 },
+      congestionRegionId: "gamcheon",
+    },
+    {
+      id: "busan-new",
+      name: "부산신항",
+      shortName: "신항",
+      center: { lat: 35.081, lon: 128.79 },
+      congestionRegionId: "sinhang",
+    },
+  ],
+
+  // 접근 경로 — 해수부 항만가이드라인 지정항로에서 추출한 실측 중심선(backend/ports/busan-guideline-routes.ts).
+  approachRoutes: BUSAN_GUIDELINE_APPROACH_ROUTES,
+
+  // ── 동시 재항 척수 용량 + 대기시간 보정 ──
+  // 2019-01~2024-12 부산항만공사 입출항 집계 270,357건에서 구간겹침 스윕으로 산출.
+  // 검증: 컨테이너 동시재항 중앙 39척 ≈ 물리 컨테이너 선석 40석 (평시 선석 포화).
+  portCallCapacity: {
+    source: "부산항만공사 입출항 집계 2019-01~2024-12 (270,357건)",
+    portWide: { p50: 300, p95: 341, p99: 367, max: 426 },
+    container: { p50: 39, p95: 50, p99: 56, max: 75 },
+    containerBerths: 40, // 북항 17 + 신항 23 (busan-throughput 참조)
+    totalBerths: 40,
+    dwellMedianHours: 20.7,
+    containerHourlyCapacity: {
+      source: "codex_energy_data_pack_utf8_fixed/data/port-hourly-capacity.csv",
+      defaultBasis: "mixed-800-teu",
+      mixedCallsPerHour: 3.203,
+      largeCallsPerHour: 1.025,
+      teuPerHour: 2562.4,
+      note: "에너지 절감 의사결정용 컨테이너 처리능력 요약값. 기존 Port-MIS 혼잡도는 arrivalCapacityPerHour와 portWide 재항 분포를 계속 사용한다.",
+    },
+    // 혼잡도별 재항시간 실측: 컨테이너 16→20h, 탱커 20→27h. P75 꼬리로 대기 추정.
+    wait: {
+      container: { freeDwellHours: 16, congestedExtraHours: 8, onsetLevel: 0.7 },
+      tanker: { freeDwellHours: 20, congestedExtraHours: 14, onsetLevel: 0.65 },
+      default: { freeDwellHours: 18, congestedExtraHours: 10, onsetLevel: 0.7 },
+    },
+    // 시간대(0~23시) 평시=1.0 대비 계수 — 항 전체는 장기재항선이 많아 일중 변동 ±1%.
+    hourOfDayFactor: [
+      0.993, 0.997, 0.999, 1.0, 0.999, 0.997, 0.996, 1.003, 1.008, 1.01, 1.01, 1.009,
+      1.006, 1.005, 1.004, 1.002, 0.999, 0.996, 0.995, 0.995, 0.996, 0.994, 0.995, 0.992,
+    ],
+    // 월(1~12월) 계수 — 2월 성수기(+7%), 9~12월 한산(-5%).
+    monthFactor: [
+      1.026, 1.073, 1.038, 1.031, 1.043, 1.007, 0.986, 0.995, 0.947, 0.953, 0.953, 0.952,
+    ],
+  },
 };

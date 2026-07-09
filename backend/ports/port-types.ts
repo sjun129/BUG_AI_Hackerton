@@ -22,6 +22,7 @@ export interface Ship {
   // AIS는 실시간 위치만 주고 "직전/다음 항구"가 없다. backend/portmis가 호출부호(callSign)
   // 또는 선박명으로 매칭해 채운다 — 전부 optional: 매칭 안 되면 그냥 비워둔다.
   callSign?: string; // 호출부호 — AIS ShipStaticData와 Port-MIS clsgn을 잇는 매칭 키
+  imo?: string; // IMO 선박식별번호 (AIS ShipStaticData에서 수집)
   previousPort?: string; // 직전 출항항
   nextPort?: string; // 다음 기항지
   berthName?: string; // Port-MIS 신고상의 실제 접안/정박 시설명
@@ -63,6 +64,107 @@ export interface CongestionThresholds {
   medium: number; // low < level <= medium: 보통, 초과 시 혼잡
 }
 
+// 동시 재항 척수 용량 — 2019~2024 부산항만공사 입출항 집계 27만건에서 오프라인 산출한
+// 실측 상수. "동시 재항" = 부산항계 안(접안+묘박+대기 전체). 혼잡도 정규화의 분모로 쓴다.
+// (P50=평시 중앙, P99=현실적 최대. 실시간 AIS/MIS도 같은 경계로 세야 분모/분자가 맞는다.)
+export interface CapacityBand {
+  p50: number; // 중앙(평시)
+  p95: number;
+  p99: number; // 권장 혼잡도 max(분모)
+  max: number; // 절대 상한(역대 최대)
+}
+
+// 혼잡도→대기시간 환산에 쓰는 재항시간(dwell) 앵커. 실측 회귀 결과:
+// 혼잡도가 오를수록 재항시간이 늘어난다(컨테이너 16h→20h, 탱커 20h→27h; 포화 시 P75 꼬리 큼).
+export interface WaitCalibration {
+  freeDwellHours: number; // 한산할 때 재항시간(중앙)
+  congestedExtraHours: number; // 포화(혼잡도≈1)에서 추가되는 대기시간(P75 기준 실측)
+  onsetLevel: number; // 이 혼잡도 이하에선 유의미한 대기가 거의 없음
+}
+
+// 항만 처리능력(입출항 집계 기반) — seed-port.ts 가 채운다.
+export interface PortCallCapacity {
+  source: string; // 산출 근거(기간)
+  portWide: CapacityBand; // 전체 선박 동시 재항
+  container: CapacityBand; // 컨테이너선만
+  containerBerths: number; // 물리 컨테이너 선석 수(검증: container.p50 ≈ berths)
+  totalBerths: number; // 부산항 전체 컨테이너 선석(북항+신항)
+  dwellMedianHours: number; // 전체 재항시간 중앙값
+  containerHourlyCapacity?: {
+    source: string;
+    defaultBasis: "mixed-800-teu" | "large-2500-teu";
+    mixedCallsPerHour: number;
+    largeCallsPerHour: number;
+    teuPerHour: number;
+    note?: string;
+  };
+  wait: { container: WaitCalibration; tanker: WaitCalibration; default: WaitCalibration };
+  hourOfDayFactor: number[]; // [0..23] 평시=1.0 대비 계수
+  monthFactor: number[]; // [0..11] 평시=1.0 대비 계수
+}
+
+// 혼잡도를 나눠 볼 지역(항).
+// - 시간대별 혼잡도(곡선): 해수부 연안AIS 통계를 지역 bbox(center±radiusKm)로 조회해 계산.
+// - 입항/출항 수치·미래 예측: Port-MIS 입출항 신고를 berthAreaId 로 집계.
+// ⚠️ AIS 통계 격자(소해구도 ~10km)는 인접한 북항·감천을 한 셀로 묶어 분리 못 한다(신항만 분리).
+//    그래서 aisSeparable=false 인 지역은 AIS 곡선이 서로 유사하게 나올 수 있다.
+export interface CongestionRegion {
+  id: string;
+  name: string;
+  center: LatLon; // AIS 통계 조회용 지역 중심
+  radiusKm: number; // AIS 통계 조회용 bbox 반경
+  aisHourlyCapacity: number; // AIS 시간대별 척수 → 0~1 정규화 분모(지역 규모 기반 근사)
+  aisSeparable: boolean; // AIS 격자로 이 지역이 인접 지역과 분리되는지(신항 true, 북항·감천 false)
+  berthAreaIds: string[]; // Port-MIS 입출항을 이 지역으로 집계할 부두들
+  isDefault?: boolean; // 어느 지역에도 안 잡힌 신고를 담을 지역(정확히 하나만 true)
+}
+
+// 지역별 시간대별 혼잡도 + 입출항 요약(API 응답 단위).
+export interface RegionCongestionSeries {
+  id: string;
+  name: string;
+  currentLevel: number; // 0~1 (현재 시각 AIS 밀도)
+  forecast: CongestionPoint[]; // 시간대별 곡선 (현재=AIS, 미래=Port-MIS 예측)
+  arrivals: number; // 최근 activityWindowHours 시간 Port-MIS 입항 신고 수
+  departures: number; // 최근 activityWindowHours 시간 Port-MIS 출항 신고 수
+  activityWindowHours: number; // 입·출항 집계 창(시간) — UI 표기용
+  currentVessels: number; // 현재 재항 척수 = AIS 통계 현재 시각(KST) 해역 척수
+  aisSeparable: boolean; // AIS 격자 분리 가능 여부(UI 안내용)
+  source: string; // 곡선 근거
+}
+
+export type SimulationDestinationPortId = "busan-north" | "gamcheon" | "busan-new";
+
+export interface SimulationDestinationPort {
+  id: SimulationDestinationPortId;
+  name: string;
+  shortName: string;
+  center: LatLon;
+  congestionRegionId: string;
+}
+
+export interface ApproachRouteWaypoint {
+  lat: number;
+  lng: number;
+  label?: string;
+}
+
+// 접근 경로 출처.
+//  - manual-simulation-route: 손으로 찍은 시나리오 비교용 경로(구버전).
+//  - mof-guideline-route: 해수부 항만가이드라인 지정항로(data.go.kr 15121382)의 회랑 폴리곤에서
+//    추출한 실측 중심선. backend/ports/busan-guideline-routes.ts 참조.
+export type ApproachRouteSource = "manual-simulation-route" | "mof-guideline-route";
+
+export interface ApproachRoute {
+  id: string;
+  destinationPortId: SimulationDestinationPortId;
+  name: string;
+  shortName: string;
+  description?: string;
+  source: ApproachRouteSource;
+  waypoints: ApproachRouteWaypoint[];
+}
+
 export interface PortConfig {
   name: string;
   center: LatLon;
@@ -73,18 +175,33 @@ export interface PortConfig {
   congestionThresholds: CongestionThresholds;
   shipsPerHourCapacity: number; // (AIS 혼잡도) 시간당 처리 가능 선박 수 — 정규화 기준
   arrivalCapacityPerHour: number; // (Port-MIS 혼잡도) 시간당 입항 신고 처리량 — 정규화 기준
+  // (해수부 연안AIS 통계 혼잡도) 부산 bbox(mockAreaRadiusKm) 안 시간당 AIS 척수를 level=1로 볼 포화 기준.
+  // Port-MIS(입출항, 수백 척)와 달리 해역 내 모든 AIS 송신선을 세므로 규모가 훨씬 크다(전용 앵커).
+  aisStatsHourlyCapacity: number;
+  congestionRegions: CongestionRegion[]; // 지역별 혼잡도 분할(부산/감천/신항 등)
+  simulationDestinations: SimulationDestinationPort[]; // /simulation 가상 선박 도착지 선택지
+  approachRoutes: ApproachRoute[]; // /simulation 사전 정의 접근 경로 후보
+  portCallCapacity: PortCallCapacity; // 동시 재항 용량·대기 보정(입출항 집계 실측)
 }
 
 export interface CongestionPoint {
   time: string; // ISO 8601
   level: number; // 0~1
   arrivals?: number; // 해당 시간대 입항 신고 건수 (Port-MIS 기반일 때)
+  currentInPort?: number; // 현재 정박/항내 선박 수 (Port-MIS port_calls 스냅샷)
+  arrivalCapacity?: number; // Port-MIS 시간당 입항 처리량 기준
+  arrivalPressure?: number; // 입항 예정 선박 수 기반 압력
+  inPortPressure?: number; // 현재 정박 선박 수 기반 압력
+  areaVesselCount?: number; // 해당 시간대 해역 격자 내 AIS 척수 합계 (해수부 연안AIS 통계 기반일 때)
 }
 
 export interface CongestionForecast {
   port: string;
   currentLevel: number; // 0~1
   forecast: CongestionPoint[];
+  source?: string;
+  basis?: string;
+  lastUpdated?: string;
 }
 
 export interface AdvisorRecommendation {

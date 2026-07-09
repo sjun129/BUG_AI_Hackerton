@@ -12,6 +12,7 @@ create table if not exists public.ships (
   status                text not null check (status in ('underway','anchored','moored')),
   destination_berth_id  text,
   call_sign             text,                                -- AIS 호출부호 (Port-MIS 매칭 키)
+  imo                   text,                                -- AIS ShipStaticData IMO 선박식별번호
   -- ↓ Port-MIS(해양수산부_선박운항정보) 입출항 신고 매칭 보강 필드. AIS 10초 폴링 upsert는
   --   이 컬럼들을 절대 건드리지 않는다(backend/ais/ship-source.ts의 shipToRow 참고) —
   --   backend/portmis/run-enrich.ts만 별도 update로 채운다.
@@ -27,6 +28,7 @@ create table if not exists public.ships (
 -- 이미 ships 테이블이 있던 프로젝트(테이블 생성이 위 create table 문을 건너뜀)를 위한
 -- 컬럼 추가. 새로 만드는 경우에도 그대로 실행해도 안전하다(멱등).
 alter table public.ships add column if not exists call_sign text;
+alter table public.ships add column if not exists imo text;
 alter table public.ships add column if not exists previous_port text;
 alter table public.ships add column if not exists next_port text;
 alter table public.ships add column if not exists berth_name text;
@@ -52,6 +54,17 @@ create table if not exists public.port_calls (
   updated_at     timestamptz not null default now(),
   -- 호출부호가 빈 소형선도 있어 선박명을 함께 키로 써서 선박당 1행(최신)만 유지한다.
   primary key (call_sign, vessel_name)
+);
+
+-- 최근 24시간 부두별 입·출항 신고 집계. port_calls는 "현재 정박 중" 선박 스냅샷이라
+-- 출항한 배가 아예 담기지 않으므로(event도 전부 "입항"), 입·출항 건수는
+-- run-enrich.ts가 이 테이블에 따로 저장하고 지역별 혼잡도 API가 읽는다.
+create table if not exists public.port_call_activity (
+  berth_area_id  text primary key,                     -- seed-port berthAreas.id ('' = 부두 미매칭)
+  arrivals       int not null default 0,               -- 최근 window_hours 시간 입항 신고 수
+  departures     int not null default 0,               -- 최근 window_hours 시간 출항 신고 수
+  window_hours   int not null default 24,
+  updated_at     timestamptz not null default now()
 );
 
 -- Port-MIS 기반 혼잡도 스냅샷 (시간대별 입항 신고 밀도). run-enrich.ts가 매 실행 시 교체.
