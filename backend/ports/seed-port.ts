@@ -171,4 +171,14 @@ export const BUSAN_PORT: PortConfig = {
       1.026, 1.073, 1.038, 1.031, 1.043, 1.007, 0.986, 0.995, 0.947, 0.953, 0.953, 0.952,
     ],
   },
+
+  // 환경차등 입항료 정책(예시값 — 실 항만 요율표로 교체 가능).
+  //  - ratePerGtUsd: GT당 표준 입항료. 5만 GT선 → 약 $17,500 수준이 되도록 0.35로 근사.
+  //  - carbonPriceUsdPerTon: 탄소부담금 단가. EU ETS 2026 EUA(~$90/tCO2) 참조.
+  //  - gradeMultiplier: CII 등급 차등. A −15% 할인 ~ E +15% 할증(그린포트 인센티브 구조 근사).
+  portDue: {
+    ratePerGtUsd: 0.35,
+    carbonPriceUsdPerTon: 90,
+    gradeMultiplier: { A: -0.15, B: -0.075, C: 0, D: 0.075, E: 0.15 },
+  },
 };

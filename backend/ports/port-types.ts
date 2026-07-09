@@ -81,6 +81,15 @@ export interface CollisionRiskThresholds {
   minMonitoredGrossTonnage: number;
 }
 
+// 환경차등 입항료 정책 — CO2 배출·CII 등급에 따라 입항료를 할인/할증한다(그린포트 정책값).
+// 요율·탄소가격은 항만 고유 정책이라 seed-port.ts 에 둔다(데이터/코드 분리).
+export interface PortDuePolicy {
+  ratePerGtUsd: number; // 표준 입항료 = GT × 이 값 (USD)
+  carbonPriceUsdPerTon: number; // 탄소부담금 단가 (USD / tCO2)
+  // CII 등급(A~E)별 표준 입항료 대비 차등율. 음수=할인(청정선), 양수=할증(저효율선).
+  gradeMultiplier: { A: number; B: number; C: number; D: number; E: number };
+}
+
 // 동시 재항 척수 용량 — 2019~2024 부산항만공사 입출항 집계 27만건에서 오프라인 산출한
 // 실측 상수. "동시 재항" = 부산항계 안(접안+묘박+대기 전체). 혼잡도 정규화의 분모로 쓴다.
 // (P50=평시 중앙, P99=현실적 최대. 실시간 AIS/MIS도 같은 경계로 세야 분모/분자가 맞는다.)
@@ -200,6 +209,7 @@ export interface PortConfig {
   simulationDestinations: SimulationDestinationPort[]; // /simulation 가상 선박 도착지 선택지
   approachRoutes: ApproachRoute[]; // /simulation 사전 정의 접근 경로 후보
   portCallCapacity: PortCallCapacity; // 동시 재항 용량·대기 보정(입출항 집계 실측)
+  portDue: PortDuePolicy; // 환경차등 입항료 정책(탄소부담금·CII 등급 차등)
 }
 
 export interface CongestionPoint {
