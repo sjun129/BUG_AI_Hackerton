@@ -82,7 +82,7 @@ export async function getRouteScenarios(input: RouteScenarioRequest): Promise<Ro
       portMisCongestion ? "port-mis-congestion" : "congestion-fallback",
       "regional-port-congestion",
       "energy-baseline-data",
-      "manual-simulation-route",
+      "mof-guideline-route",
     ],
     validation,
     ...(validation.issues.length > 0 ? { invalidShips: validation.issues } : {}),

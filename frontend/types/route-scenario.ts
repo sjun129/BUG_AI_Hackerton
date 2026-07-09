@@ -37,7 +37,7 @@ export interface RouteScenario {
   routeId: string;
   routeName: string;
   routeShortName: string;
-  routeSource: "manual-simulation-route";
+  routeSource: "manual-simulation-route" | "mof-guideline-route";
   destinationPortId: string;
   destinationPortName: string;
   distanceNm: number;

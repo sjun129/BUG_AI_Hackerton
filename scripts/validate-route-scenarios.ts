@@ -32,15 +32,15 @@ const regionalCongestion: RegionCongestionSeries[] = BUSAN_PORT.congestionRegion
 const { ships, validation } = normalizeSimulatedShipsForDecision(
   [
     {
-      id: "sim-busan-new",
-      name: "SIM BUSAN NEW",
-      lat: 34.92,
-      lng: 129.08,
+      id: "sim-busan-north",
+      name: "SIM BUSAN NORTH",
+      lat: 35.0,
+      lng: 129.2,
       sog: 12,
       status: "underway",
       vesselType: "container",
       grossTonnage: 80000,
-      destinationPortId: "busan-new",
+      destinationPortId: "busan-north",
       source: "manual",
     },
   ],
@@ -66,7 +66,7 @@ assert.equal(result.summary.shipCount, 1);
 assert.equal(result.summary.recommendedCount, 1);
 
 const shipResult = result.results[0];
-assert.equal(shipResult.destinationPortId, "busan-new");
+assert.equal(shipResult.destinationPortId, "busan-north");
 assert.ok(shipResult.routeScenarios.length >= 2);
 assert.equal(shipResult.routeScenarios.filter((scenario) => scenario.isRecommended).length, 1);
 assert.ok(shipResult.routeScenarios.some((scenario) => scenario.isRecommended && scenario.routePolyline.points.length >= 2));

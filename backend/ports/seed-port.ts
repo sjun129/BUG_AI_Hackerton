@@ -4,6 +4,7 @@
 // 이 파일이 내보내는 BUSAN_PORT 를 읽어서 동작할 뿐, 좌표·임계값을 직접 갖지 않는다.
 
 import type { PortConfig } from "./port-types";
+import { BUSAN_GUIDELINE_APPROACH_ROUTES } from "./busan-guideline-routes";
 
 export const BUSAN_PORT: PortConfig = {
   name: "부산항",
@@ -119,86 +120,8 @@ export const BUSAN_PORT: PortConfig = {
     },
   ],
 
-  approachRoutes: [
-    {
-      id: "busan-north-west",
-      destinationPortId: "busan-north",
-      name: "부산항 북항 서측 접근 경로",
-      shortName: "서측 접근",
-      source: "manual-simulation-route",
-      description: "부산항 북항 입항 시나리오 비교를 위한 수동 정의 접근 경로",
-      waypoints: [
-        { lat: 34.98, lng: 128.96, label: "서측 외해 접근점" },
-        { lat: 35.03, lng: 129.01, label: "남외항 인근" },
-        { lat: 35.09, lng: 129.07, label: "부산항 북항" },
-      ],
-    },
-    {
-      id: "busan-north-east",
-      destinationPortId: "busan-north",
-      name: "부산항 북항 동측 접근 경로",
-      shortName: "동측 접근",
-      source: "manual-simulation-route",
-      description: "부산항 북항 입항 시나리오 비교를 위한 수동 정의 접근 경로",
-      waypoints: [
-        { lat: 34.96, lng: 129.25, label: "동측 외해 접근점" },
-        { lat: 35.02, lng: 129.17, label: "오륙도 외측" },
-        { lat: 35.09, lng: 129.07, label: "부산항 북항" },
-      ],
-    },
-    {
-      id: "gamcheon-southwest",
-      destinationPortId: "gamcheon",
-      name: "감천항 남서측 접근 경로",
-      shortName: "남서측 접근",
-      source: "manual-simulation-route",
-      description: "감천항 입항 시나리오 비교를 위한 수동 정의 접근 경로",
-      waypoints: [
-        { lat: 34.9, lng: 128.9, label: "남서측 외해 접근점" },
-        { lat: 35.01, lng: 128.97, label: "다대포 외측" },
-        { lat: 35.078, lng: 129.01, label: "감천항" },
-      ],
-    },
-    {
-      id: "gamcheon-offshore-waiting",
-      destinationPortId: "gamcheon",
-      name: "감천항 외해 대기지 접근 경로",
-      shortName: "외해 대기지",
-      source: "manual-simulation-route",
-      description: "감천항 외해 대기지 경유를 가정한 수동 정의 접근 경로",
-      waypoints: [
-        { lat: 34.99, lng: 129.08, label: "감천 외해 대기지" },
-        { lat: 35.035, lng: 129.035, label: "감천항 입구" },
-        { lat: 35.078, lng: 129.01, label: "감천항" },
-      ],
-    },
-    {
-      id: "busan-new-south",
-      destinationPortId: "busan-new",
-      name: "부산신항 남측 접근 경로",
-      shortName: "남측 접근",
-      source: "manual-simulation-route",
-      description: "부산신항 입항 시나리오 비교를 위한 수동 정의 접근 경로",
-      waypoints: [
-        { lat: 34.86, lng: 129.05, label: "남측 외해 접근점" },
-        { lat: 34.98, lng: 128.95, label: "신항 접근해역" },
-        { lat: 35.081, lng: 128.79, label: "부산신항" },
-      ],
-    },
-    {
-      id: "busan-new-west",
-      destinationPortId: "busan-new",
-      name: "부산신항 서측 접근 경로",
-      shortName: "서측 접근",
-      source: "manual-simulation-route",
-      description: "부산신항 입항 시나리오 비교를 위한 수동 정의 접근 경로",
-      waypoints: [
-        { lat: 35.02, lng: 128.58, label: "서측 외해 접근점" },
-        { lat: 35.06, lng: 128.68, label: "가덕도 서측" },
-        { lat: 35.081, lng: 128.79, label: "부산신항" },
-      ],
-    },
-  ],
+  // 접근 경로 — 해수부 항만가이드라인 지정항로에서 추출한 실측 중심선(backend/ports/busan-guideline-routes.ts).
+  approachRoutes: BUSAN_GUIDELINE_APPROACH_ROUTES,
 
   // ── 동시 재항 척수 용량 + 대기시간 보정 ──
   // 2019-01~2024-12 부산항만공사 입출항 집계 270,357건에서 구간겹침 스윕으로 산출.

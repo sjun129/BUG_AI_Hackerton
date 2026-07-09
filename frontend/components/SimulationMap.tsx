@@ -210,7 +210,7 @@ export default function SimulationMap({ ships, simulationMode, onMapContextMenu,
                     <p style={{ margin: "3px 0" }}>ETA: {formatDateTime(overlay.eta)}</p>
                     <p style={{ margin: "3px 0" }}>점수: {overlay.score ?? "-"}</p>
                     <p style={{ margin: "6px 0 0", color: "#64748b", fontSize: 11 }}>
-                      사전 정의 접근 경로 후보를 표시한 시뮬레이션 선입니다. 실제 항해 지시가 아닙니다.
+                      해수부 항만가이드라인 지정항로 중심선을 표시한 시뮬레이션 선입니다. 실제 항해 지시가 아닙니다.
                     </p>
                   </div>
                 </Popup>

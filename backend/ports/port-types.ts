@@ -149,13 +149,19 @@ export interface ApproachRouteWaypoint {
   label?: string;
 }
 
+// 접근 경로 출처.
+//  - manual-simulation-route: 손으로 찍은 시나리오 비교용 경로(구버전).
+//  - mof-guideline-route: 해수부 항만가이드라인 지정항로(data.go.kr 15121382)의 회랑 폴리곤에서
+//    추출한 실측 중심선. backend/ports/busan-guideline-routes.ts 참조.
+export type ApproachRouteSource = "manual-simulation-route" | "mof-guideline-route";
+
 export interface ApproachRoute {
   id: string;
   destinationPortId: SimulationDestinationPortId;
   name: string;
   shortName: string;
   description?: string;
-  source: "manual-simulation-route";
+  source: ApproachRouteSource;
   waypoints: ApproachRouteWaypoint[];
 }
 

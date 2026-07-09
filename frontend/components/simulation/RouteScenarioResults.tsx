@@ -144,7 +144,7 @@ export default function RouteScenarioResults({ result }: { result: RouteScenario
   if (!result) {
     return (
       <div style={{ color: muted, fontSize: 12.5, lineHeight: 1.6 }}>
-        경로 추천 계산 후 도착지별 사전 정의 접근 경로 후보의 거리, ETA, 혼잡도, 예상 대기, 연료와 CO₂ 비교가 여기에 표시됩니다.
+        경로 추천 계산 후 도착지별 해수부 지정항로(항만가이드라인)의 거리, ETA, 혼잡도, 예상 대기, 연료와 CO₂ 비교가 여기에 표시됩니다.
       </div>
     );
   }
@@ -162,7 +162,7 @@ export default function RouteScenarioResults({ result }: { result: RouteScenario
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingRight: 2 }}>
       <div style={{ borderRadius: 8, border: "1px solid rgba(34,197,94,.18)", background: "rgba(34,197,94,.08)", padding: 10, color: "#bbf7d0", fontSize: 12, lineHeight: 1.5 }}>
-        계산 기준: 사전 정의 접근 경로 후보 비교 · 추천 {result.summary.recommendedCount}척 / 입력 {result.summary.shipCount}척
+        계산 기준: 해수부 지정항로(항만가이드라인) 비교 · 추천 {result.summary.recommendedCount}척 / 입력 {result.summary.shipCount}척
         <br />
         {result.calculationNote}
       </div>

@@ -350,7 +350,7 @@ export default function SimulationPage() {
               <div>
                 <h2 style={{ margin: 0, fontSize: 14, fontWeight: 900 }}>친환경 입항 경로 추천</h2>
                 <p style={{ margin: "7px 0 0", color: muted, fontSize: 11.5, lineHeight: 1.45 }}>
-                  선택 도착지의 사전 정의 접근 경로 후보를 거리·혼잡도·예상 대기·연료·CO₂ 기준으로 비교합니다. JIT는 감속 권고, 경로 추천은 접근 경로 후보 비교입니다.
+                  선택 도착지의 해수부 지정항로(항만가이드라인)를 거리·혼잡도·예상 대기·연료·CO₂ 기준으로 비교합니다. JIT는 감속 권고, 경로 추천은 지정항로 비교입니다.
                 </p>
               </div>
               <button
