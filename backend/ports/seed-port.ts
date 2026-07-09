@@ -48,6 +48,20 @@ export const BUSAN_PORT: PortConfig = {
   // level = 0.0~0.3 원활, 0.3~0.6 보통, 0.6~1.0 혼잡
   congestionThresholds: { low: 0.3, medium: 0.6 },
 
+  // VTS 근접 충돌위험 경보 경계값. 부산항 접근수로·항계는 폭이 넓지 않아,
+  // 최근접 0.5해리(≈925m) 이내면 주의, 0.25해리(≈460m) 이내면 위험으로 본다.
+  // 15분 이내에 최근접이 예상될 때만 경보하고, 0.5kn 미만(접안·묘박)은 판정에서 뺀다.
+  // 상대속도 2kn 미만은 붐비는 정박지에서 서로 가까이 떠 있을 뿐인 저속 쌍이라 제외한다.
+  // 총톤수 300 미만 소형선(어선 등)은 개별 충돌 경보 대상에서 뺀다(실 VTS 관행).
+  collisionRisk: {
+    cpaWarnNm: 0.5,
+    cpaDangerNm: 0.25,
+    tcpaHorizonMin: 15,
+    ignoreSpeedKn: 0.5,
+    minClosingSpeedKn: 2,
+    minMonitoredGrossTonnage: 300,
+  },
+
   // (AIS 혼잡도) 시간당 이 척수를 초과해 입항하면 혼잡도 level = 1(포화)로 간주
   shipsPerHourCapacity: 4,
 

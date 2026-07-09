@@ -23,6 +23,7 @@ export interface Ship {
   // 또는 선박명으로 매칭해 채운다 — 전부 optional: 매칭 안 되면 그냥 비워둔다.
   callSign?: string; // 호출부호 — AIS ShipStaticData와 Port-MIS clsgn을 잇는 매칭 키
   imo?: string; // IMO 선박식별번호 (AIS ShipStaticData에서 수집)
+  aisShipType?: number; // AIS 선종코드(ITU-R M.1371, 0~99) — 대형 상선/소형선 분류용. backend/ais/ship-type.ts
   previousPort?: string; // 직전 출항항
   nextPort?: string; // 다음 기항지
   berthName?: string; // Port-MIS 신고상의 실제 접안/정박 시설명
@@ -62,6 +63,22 @@ export interface BerthArea {
 export interface CongestionThresholds {
   low: number; // level <= low: 원활
   medium: number; // low < level <= medium: 보통, 초과 시 혼잡
+}
+
+// VTS 근접 충돌위험(CPA/TCPA) 경보 경계값 — 관제사 주의 분배용.
+// CPA(최근접 거리)가 작고 TCPA(최근접까지 시간)가 짧을수록 위험. 항만·해역 특성에 따라
+// 협수로가 좁으면 경계 거리를 줄여야 하므로 항만 고유값으로 seed-port.ts 에 둔다.
+export interface CollisionRiskThresholds {
+  cpaWarnNm: number; // 최근접 거리 이 값 이하 → 경보(warning)
+  cpaDangerNm: number; // 최근접 거리 이 값 이하 → 위험(danger)
+  tcpaHorizonMin: number; // 최근접이 이 시간(분) 이내로 임박할 때만 경보(먼 미래는 무시)
+  ignoreSpeedKn: number; // 두 선박 모두 이 속력 미만이면 정지(접안·묘박)로 보고 판정 제외
+  // 상대속도(접근 속도)가 이 값 미만이면 제외. 붐비는 정박지에서 서로 가까이 떠 있을 뿐인
+  // 저속 선박 쌍(대응 시간이 충분)을 걸러, "실제로 좁혀지는" 조우만 남긴다.
+  minClosingSpeedKn: number;
+  // VTS 관제 대상 최소 총톤수(GT). 이 값 미만의 소형선(어선·예인·부선 등)은 충돌 경보에서 뺀다.
+  // 실제 관제도 소형선엔 개별 CPA 경보를 내지 않는다. 총톤수가 파악된 선박에만 적용(아래 참고).
+  minMonitoredGrossTonnage: number;
 }
 
 // 동시 재항 척수 용량 — 2019~2024 부산항만공사 입출항 집계 27만건에서 오프라인 산출한
@@ -173,6 +190,7 @@ export interface PortConfig {
   zones: Zone[];
   berthAreas: BerthArea[]; // 부두별 위치(선석명 분류용)
   congestionThresholds: CongestionThresholds;
+  collisionRisk: CollisionRiskThresholds; // VTS 근접 충돌위험(CPA/TCPA) 경보 경계값
   shipsPerHourCapacity: number; // (AIS 혼잡도) 시간당 처리 가능 선박 수 — 정규화 기준
   arrivalCapacityPerHour: number; // (Port-MIS 혼잡도) 시간당 입항 신고 처리량 — 정규화 기준
   // (해수부 연안AIS 통계 혼잡도) 부산 bbox(mockAreaRadiusKm) 안 시간당 AIS 척수를 level=1로 볼 포화 기준.
