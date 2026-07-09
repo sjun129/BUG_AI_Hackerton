@@ -29,23 +29,25 @@ const STATUS_LABEL: Record<Ship["status"], string> = {
   moored: "접안 중",
 };
 
-// cog(침로)에 따라 회전하는 삼각형(화살촉) 아이콘을 divIcon으로 만든다.
+// cog(침로)에 따라 회전하는 선박 모양(반투명 선체) 아이콘을 divIcon으로 만든다.
 // 기본 Marker 이미지 대신 인라인 SVG를 쓰면 Next.js 번들러의 아이콘 경로 문제를 피할 수 있다.
 function shipIcon(ship: Ship, selected: boolean): L.DivIcon {
   const color = STATUS_COLOR[ship.status];
-  const size = selected ? 30 : 22;
+  const width = selected ? 22 : 16;
+  const height = selected ? 34 : 25;
+  const fillOpacity = selected ? 0.85 : 0.55;
   const html = `
-    <div style="transform: rotate(${ship.cog}deg); width:${size}px; height:${size}px;">
-      <svg width="${size}" height="${size}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <polygon points="12,2 20,22 12,17 4,22"
-          fill="${color}" stroke="#0b1220" stroke-width="1.5" stroke-linejoin="round" />
+    <div style="transform: rotate(${ship.cog}deg); width:${width}px; height:${height}px;">
+      <svg width="${width}" height="${height}" viewBox="0 0 24 36" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12,1 L19,11 L19,28 Q19,34 12,34 Q5,34 5,28 L5,11 Z"
+          fill="${color}" fill-opacity="${fillOpacity}" stroke="#0b1220" stroke-opacity="0.85" stroke-width="1.4" stroke-linejoin="round" />
       </svg>
     </div>`;
   return L.divIcon({
     html,
     className: "ship-marker",
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
+    iconSize: [width, height],
+    iconAnchor: [width / 2, height / 2],
   });
 }
 

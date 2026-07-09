@@ -40,42 +40,44 @@ function SimulationContextMenuHandler({
   return null;
 }
 
+// 선체(hull) 모양 SVG — 대시보드 ShipMap과 같은 실루엣이되, 여기서는 완전 불투명하게 표시한다.
 function simulatedShipIcon(label: "SIM" | "SNAP"): L.DivIcon {
   const snapshot = label === "SNAP";
+  const color = snapshot ? "#60a5fa" : "#facc15";
+  const width = 22;
+  const height = 34;
   const html = `
-    <div style="
-      width:34px;height:34px;border-radius:10px;
-      background:${snapshot ? "#60a5fa" : "#facc15"};color:${snapshot ? "#082f49" : "#111827"};
-      border:2px solid #0b1220;
-      display:flex;align-items:center;justify-content:center;
-      font-weight:900;font-size:10px;letter-spacing:.04em;
-      box-shadow:0 10px 24px rgba(0,0,0,.36);
-    ">${label}</div>`;
+    <div style="width:${width}px;height:${height}px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.4));">
+      <svg width="${width}" height="${height}" viewBox="0 0 24 36" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12,1 L19,11 L19,28 Q19,34 12,34 Q5,34 5,28 L5,11 Z"
+          fill="${color}" stroke="#0b1220" stroke-width="1.6" stroke-linejoin="round" />
+      </svg>
+    </div>`;
   return L.divIcon({
     html,
     className: "simulation-ship-marker",
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
+    iconSize: [width, height],
+    iconAnchor: [width / 2, height / 2],
   });
 }
 
+// 대시보드(ShipMap의 regionCongestionIcon)와 같은 흰 알약형 카드 디자인 — 색 테두리 + 그림자, 라벨 위/이름 아래.
 function destinationIcon(shortName: string): L.DivIcon {
+  const color = "#0369a1";
   const html = `
-    <div style="
-      min-width:42px;height:28px;border-radius:8px;
-      background:#38bdf8;color:#082f49;
-      border:2px solid #0b1220;
-      display:flex;align-items:center;justify-content:center;
-      font-weight:900;font-size:10px;letter-spacing:.03em;
-      box-shadow:0 10px 24px rgba(0,0,0,.28);
-      padding:0 7px;
-      white-space:nowrap;
-    ">PORT ${shortName}</div>`;
+    <div style="width:96px;height:44px;display:flex;align-items:center;justify-content:center">
+      <div style="display:inline-flex;flex-direction:column;align-items:center;background:#fff;
+        border:2px solid ${color};border-radius:14px;padding:5px 14px;
+        box-shadow:0 8px 20px rgba(20,40,90,.20);white-space:nowrap">
+        <span style="font-size:10px;font-weight:800;color:${color};letter-spacing:.05em;line-height:1.05">PORT</span>
+        <span style="font-size:13px;font-weight:800;color:${color};margin-top:1px">${shortName}</span>
+      </div>
+    </div>`;
   return L.divIcon({
     html,
     className: "simulation-port-marker",
-    iconSize: [58, 28],
-    iconAnchor: [29, 14],
+    iconSize: [96, 44],
+    iconAnchor: [48, 22],
   });
 }
 
@@ -172,6 +174,49 @@ function FlowingRoutePolyline({
     >
       {children}
     </Polyline>
+  );
+}
+
+// 범례용 미니 프리뷰 — 실제 지도에 그려지는 선 색상·두께·점선 패턴을 그대로 반영한다.
+function LegendLine({ color, weight, dash, opacity }: { color: string; weight: number; dash: string; opacity: number }): ReactNode {
+  return (
+    <svg width="28" height="10" viewBox="0 0 28 10" style={{ flex: "none" }}>
+      <line x1="1" y1="5" x2="27" y2="5" stroke={color} strokeWidth={weight} strokeDasharray={dash} strokeOpacity={opacity} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// 범례용 미니 선박 아이콘 — SimulationMap 마커(simulatedShipIcon)와 동일한 선체 실루엣.
+function LegendShip({ color }: { color: string }): ReactNode {
+  return (
+    <svg width="13" height="19" viewBox="0 0 24 36" style={{ flex: "none" }}>
+      <path d="M12,1 L19,11 L19,28 Q19,34 12,34 Q5,34 5,28 L5,11 Z" fill={color} stroke="#0b1220" strokeWidth={1.8} strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// 범례용 미니 항만 배지 — destinationIcon과 동일한 흰 알약형 카드 스타일.
+function LegendPort(): ReactNode {
+  return (
+    <span
+      style={{
+        flex: "none",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minWidth: 30,
+        height: 15,
+        borderRadius: 5,
+        background: "#fff",
+        color: "#0369a1",
+        border: "1.4px solid #0369a1",
+        fontWeight: 800,
+        fontSize: 8,
+        letterSpacing: ".02em",
+      }}
+    >
+      PORT
+    </span>
   );
 }
 
@@ -409,29 +454,41 @@ export default function SimulationMap({
           width: 230,
           padding: "10px 12px",
           borderRadius: 8,
-          border: "1px solid rgba(120,160,255,.2)",
-          background: "linear-gradient(160deg,rgba(8,17,34,.9),rgba(13,31,74,.82))",
-          color: "#cbd5e1",
+          border: "1px solid rgba(15,23,42,.08)",
+          background: "rgba(255,255,255,.96)",
+          color: "#334155",
           fontSize: 11,
           lineHeight: 1.45,
-          boxShadow: "0 14px 38px rgba(0,0,0,.32)",
+          boxShadow: "0 14px 32px rgba(15,23,42,.14)",
           pointerEvents: "none",
         }}
       >
-        <div style={{ color: "#5eead4", fontWeight: 900, letterSpacing: ".06em", marginBottom: 7 }}>ROUTE LEGEND</div>
-        <div style={{ display: "grid", gap: 5 }}>
-          <span><b style={{ color: "#5eead4" }}>━━</b> 추천 경로</span>
-          <span><b style={{ color: "#60a5fa" }}>┄┄</b> 후보 경로</span>
+        <div style={{ color: "#0f766e", fontWeight: 900, letterSpacing: ".06em", marginBottom: 7 }}>ROUTE LEGEND</div>
+        <div style={{ display: "grid", gap: 7 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <LegendLine color="#5eead4" weight={4} dash="10 13" opacity={0.95} /> 추천 경로
+          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <LegendLine color="#60a5fa" weight={2} dash="4 8" opacity={0.55} /> 후보 경로
+          </span>
           {overlays.some((o) => o.routeSource === "ai-computed-route") && (
-            <span><b style={{ color: "#c084fc" }}>━━</b> AI 계산 경로</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <LegendLine color="#c084fc" weight={4} dash="10 13" opacity={0.95} /> AI 계산 경로
+            </span>
           )}
           {baselineOverlays.length > 0 && (
-            <span><b style={{ color: "#94a3b8" }}>┄┄</b> 실측 기준 비교선</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <LegendLine color="#94a3b8" weight={2} dash="3 6" opacity={0.85} /> 실측 기준 비교선
+            </span>
           )}
-          <span><b style={{ color: "#facc15" }}>SIM</b> 시뮬레이션 선박</span>
-          <span><b style={{ color: "#38bdf8" }}>PORT</b> 도착 항만</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <LegendShip color="#facc15" /> 시뮬레이션 선박
+          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <LegendPort /> 도착 항만
+          </span>
         </div>
-        <div style={{ marginTop: 7, color: "#fde68a" }}>경로는 시뮬레이션용 단순화 접근 경로입니다.</div>
+        <div style={{ marginTop: 7, color: "#92400e" }}>경로는 시뮬레이션용 단순화 접근 경로입니다.</div>
       </div>
     </div>
   );

@@ -1,7 +1,9 @@
 import { generateText } from "ai";
 import { advisorModel } from "@/backend/models";
 import { fetchShips } from "@/backend/ais/ship-source";
+import { fetchPortCalls } from "@/backend/portmis/portcall-source";
 import { resolveCongestion } from "@/backend/congestion/resolve-congestion";
+import { resolveRegionalCongestion } from "@/backend/congestion/regional-congestion";
 import { buildAdvisorPrompt } from "@/backend/advisor/prompt";
 import { parseAdvisorResult } from "@/backend/advisor/parse";
 
@@ -26,8 +28,14 @@ export async function POST(req: Request) {
     }
 
     // 선박 목록(지도/프롬프트용)은 실시간 위치를 그대로 쓰되, 혼잡도는 통계 기반으로 계산한다.
-    const [ships, congestion] = await Promise.all([fetchShips(), resolveCongestion()]);
-    const prompt = buildAdvisorPrompt(ships, congestion, userMessage);
+    // 정박 현황(Port-MIS)·지역별 혼잡도도 함께 넘겨 대시보드에 보이는 데이터라면 무엇이든 답할 수 있게 한다.
+    const [ships, congestion, portCalls, regions] = await Promise.all([
+      fetchShips(),
+      resolveCongestion(),
+      fetchPortCalls(),
+      resolveRegionalCongestion(),
+    ]);
+    const prompt = buildAdvisorPrompt(ships, congestion, portCalls, regions, userMessage);
 
     const { text } = await generateText({ model: advisorModel, prompt });
     const result = parseAdvisorResult(text);

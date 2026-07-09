@@ -300,8 +300,8 @@ export default function VesselPage() {
           </StatCard>
         </div>
 
-        {/* ── 패널 그리드 ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 12 }}>
+        {/* ── 패널 그리드: 1행 (CII·선석대기·연료소모 — 3개뿐이라 3열로 균등 배치) ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 12 }}>
           {/* CII 현황 — Required·등급경계는 IMO 표준식, Attained는 추정 */}
           <Panel title="CII 현황" badge={<Pill text="표준식 + 추정" tone="blue" />}>
             {cii ? (
@@ -381,7 +381,10 @@ export default function VesselPage() {
             </div>
             <div style={{ fontSize: 10, color: muted, marginTop: 12 }}>선종·톤수 기반 정박(hoteling) 소모 추정 · IMO GHG 기준</div>
           </Panel>
+        </div>
 
+        {/* ── 패널 그리드: 2행 (속도별 탄소배출 분석 · 태풍 모니터링) ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 12 }}>
           {/* 속도별 탄소배출 효율 분석 (모델 곡선 + 실측 기상) */}
           <Panel title="속도별 탄소배출 효율 분석" style={{ gridColumn: "span 3" }} badge={<Pill text="시뮬레이션" tone="blue" />}>
             <div style={{ display: "flex", gap: 12, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -486,9 +489,10 @@ export default function VesselPage() {
               )}
             </div>
           </Panel>
+        </div>
 
-          {/* 감속 권고 (JIT 정시도착) — 이 선박 전용, Port-MIS 실제 선종 반영 */}
-          <Panel title="감속 권고 · JIT 정시도착" style={{ gridColumn: "span 4" }} badge={<Pill text="연료·CO₂ 저감" tone="green" />}>
+        {/* 감속 권고 (JIT 정시도착) — 이 선박 전용, Port-MIS 실제 선종 반영 */}
+        <Panel title="감속 권고 · JIT 정시도착" badge={<Pill text="연료·CO₂ 저감" tone="green" />}>
             {advisory ? (
               advisory.savings.fuelTon > 0 ? (
                 <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
@@ -529,8 +533,7 @@ export default function VesselPage() {
             <div style={{ fontSize: 9.5, color: muted, marginTop: 12 }}>
               2019~2024 부산항 입출항 실측(대기시간) · 선종 <b style={{ color: LT.inkSoft }}>{view?.type ?? DASH}</b> 기준 · 전속 후 묘박대기 대비 (v³ 감속 법칙)
             </div>
-          </Panel>
-        </div>
+        </Panel>
       </div>
     </div>
   );
