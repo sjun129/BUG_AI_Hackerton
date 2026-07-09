@@ -1,19 +1,29 @@
 "use client";
 
-// 좌측 아이콘 레일 — 대시보드(지도)와 선박/시뮬레이션/혼잡도 화면이 공유한다.
-// 시안(관제 지도)과 동일하게: 로고 → 관제 지도 → 선박 → 시뮬레이션 → 혼잡도, 맨 아래 밝기 아이콘.
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { LT } from "./theme";
 
 const panel = LT.panel;
 const border = LT.border;
+const HOME_LABEL = "\uD648";
+const BRIGHTNESS_LABEL = "\uBC1D\uAE30";
 
 type IconName = "map" | "ship" | "chart" | "sun";
+type RailItem = { key: string; icon?: IconName; letter?: string; label: string; href?: string };
 
-// 단색 라인 아이콘(활성 시 흰색, 비활성 시 회색). 이모지 대신 SVG로 시안의 깔끔한 톤을 맞춘다.
 function Icon({ name, color }: { name: IconName; color: string }): ReactNode {
-  const common = { width: 21, height: 21, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  const common = {
+    width: 21,
+    height: 21,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: color,
+    strokeWidth: 1.9,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+
   switch (name) {
     case "map":
       return (
@@ -46,13 +56,12 @@ function Icon({ name, color }: { name: IconName; color: string }): ReactNode {
   }
 }
 
-type RailItem = { key: string; icon?: IconName; letter?: string; label: string; href?: string };
-
 export const RAIL_ITEMS: RailItem[] = [
-  { key: "map", icon: "map", label: "관제 지도", href: "/dashboard" },
-  { key: "ship", icon: "ship", label: "선박 모니터링", href: "/vessel" },
-  { key: "sim", letter: "S", label: "시뮬레이션", href: "/simulation" },
-  { key: "congestion", icon: "chart", label: "혼잡도 통계", href: "/congestion" },
+  { key: "map", icon: "map", label: "\uAD00\uC81C \uC9C0\uB3C4", href: "/dashboard" },
+  { key: "ship", icon: "ship", label: "\uC120\uBC15 \uBAA8\uB2C8\uD130\uB9C1", href: "/vessel" },
+  { key: "sim", letter: "S", label: "\uC2DC\uBBAC\uB808\uC774\uC158", href: "/simulation" },
+  { key: "control-room", letter: "AI", label: "AI \uAD00\uC81C\uC0AC", href: "/control-room" },
+  { key: "congestion", icon: "chart", label: "\uD63C\uC7A1\uB3C4 \uD1B5\uACC4", href: "/congestion" },
 ];
 
 function RailIcon({ item, on }: { item: RailItem; on: boolean }) {
@@ -67,8 +76,9 @@ function RailIcon({ item, on }: { item: RailItem; on: boolean }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        fontSize: 17,
+        fontSize: item.letter && item.letter.length > 1 ? 12 : 17,
         fontWeight: 800,
+        letterSpacing: item.letter && item.letter.length > 1 ? "-.02em" : 0,
         color,
         background: on ? "linear-gradient(135deg,#2f6bff,#5b8cff)" : "transparent",
         boxShadow: on ? "0 6px 16px rgba(47,107,255,.35)" : "none",
@@ -80,7 +90,6 @@ function RailIcon({ item, on }: { item: RailItem; on: boolean }) {
   );
 }
 
-// active: 현재 화면에 해당하는 항목의 href (예: "/vessel")
 export default function LeftRail({ active }: { active: string }) {
   return (
     <div
@@ -103,10 +112,9 @@ export default function LeftRail({ active }: { active: string }) {
         boxShadow: LT.shadow,
       }}
     >
-      {/* 로고 */}
       <Link
         href="/"
-        title="홈"
+        title={HOME_LABEL}
         style={{
           width: 42,
           height: 42,
@@ -138,9 +146,8 @@ export default function LeftRail({ active }: { active: string }) {
         );
       })}
 
-      {/* 하단 밝기 아이콘 (시안 반영, 장식) */}
       <div style={{ marginTop: "auto" }}>
-        <RailIcon item={{ key: "sun", icon: "sun", label: "밝기" }} on={false} />
+        <RailIcon item={{ key: "sun", icon: "sun", label: BRIGHTNESS_LABEL }} on={false} />
       </div>
     </div>
   );
