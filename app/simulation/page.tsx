@@ -11,8 +11,6 @@ import SimulatedShipModal from "@/frontend/components/SimulatedShipModal";
 import { LT } from "@/frontend/components/theme";
 import { useRouteScenarios } from "@/frontend/hooks/useRouteScenarios";
 import { useSimulatedShips } from "@/frontend/hooks/useSimulatedShips";
-import { useSimulationJit } from "@/frontend/hooks/useSimulationJit";
-import type { EnergyDecision } from "@/frontend/types/energy-decision";
 import type { ClimateOverrideInput, RouteScenarioBaselineOverlay, RouteScenarioMapOverlay } from "@/frontend/types/route-scenario";
 import type { NewSimulatedShipInput, ScenarioShipSource, SimulatedShip } from "@/frontend/types/simulation";
 import { SIMULATED_VESSEL_TYPE_LABELS } from "@/frontend/types/simulation";
@@ -49,44 +47,8 @@ function formatDateTime(iso: string): string {
   });
 }
 
-// 시안의 "07.09 06:20" 표기 — MM.DD HH:MM (KST).
-function formatEtaShort(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "-";
-  const parts: Record<string, string> = {};
-  for (const p of new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Seoul",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(date)) {
-    parts[p.type] = p.value;
-  }
-  return `${parts.month}.${parts.day} ${parts.hour}:${parts.minute}`;
-}
-
-// kg → 톤(t) 감축량. 시안처럼 "-2.6 t"로 절감(음수)임을 표시한다.
-function formatTonneDelta(kg: number): string {
-  const t = kg / 1000;
-  return `-${t.toFixed(t < 10 ? 1 : 0)}`;
-}
-
-function simulationDestinationName(destinationPortId: string | undefined): string {
-  return SIMULATION_DESTINATION_PORTS.find((destination) => destination.id === destinationPortId)?.name ?? "부산항 북항";
-}
-
 function simulationDestinationShort(destinationPortId: string | undefined): string {
   return SIMULATION_DESTINATION_PORTS.find((destination) => destination.id === destinationPortId)?.shortName ?? "북항";
-}
-
-function destinationBasisLabel(basis: string): string {
-  if (basis === "destination-current-level") return "선택 도착지 현재 혼잡도";
-  if (basis === "destination-eta-forecast-bucket") return "선택 도착지 ETA 시간대 혼잡도";
-  if (basis === "global-current-level-fallback") return "전체 혼잡도 fallback";
-  if (basis === "dashboard-current-level") return "dashboard-current";
-  return basis;
 }
 
 // 라이트 카드 공용 스타일.
@@ -180,27 +142,6 @@ function RunButton({ label, onClick, disabled, tone }: { label: string; onClick:
   );
 }
 
-// JIT 결과 지표 타일.
-function ResultTile({ label, value, unit, tone = "neutral", full }: { label: string; value: string; unit?: string; tone?: "neutral" | "green"; full?: boolean }) {
-  const green = tone === "green";
-  return (
-    <div
-      style={{
-        gridColumn: full ? "1 / -1" : undefined,
-        borderRadius: 12,
-        padding: "11px 13px",
-        background: green ? "rgba(22,163,74,.09)" : LT.tile,
-      }}
-    >
-      <div style={{ color: green ? "rgba(22,163,74,.85)" : muted, fontSize: 11, fontWeight: 700 }}>{label}</div>
-      <div style={{ marginTop: 4, fontSize: 19, fontWeight: 800, color: green ? LT.green : LT.ink, lineHeight: 1 }}>
-        {value}
-        {unit && <span style={{ fontSize: 11, fontWeight: 700, marginLeft: 4, color: green ? "rgba(22,163,74,.75)" : muted }}>{unit}</span>}
-      </div>
-    </div>
-  );
-}
-
 function EmptyState() {
   return (
     <div
@@ -226,14 +167,6 @@ export default function SimulationPage() {
   const [liveImportOpen, setLiveImportOpen] = useState(false);
   const [climateOverride, setClimateOverride] = useState<ClimateOverrideInput>({ enabled: false });
   const {
-    result: jitResult,
-    loading: jitLoading,
-    error: jitError,
-    notice: jitNotice,
-    runJitSimulation: requestJitSimulation,
-    resetSimulationJit,
-  } = useSimulationJit();
-  const {
     result: routeResult,
     loading: routeLoading,
     error: routeError,
@@ -243,13 +176,6 @@ export default function SimulationPage() {
   } = useRouteScenarios();
 
   const defaultName = useMemo(() => nextDefaultName(simulatedShips), [simulatedShips]);
-  const decisionsByShipId = useMemo(() => {
-    const map = new Map<string, EnergyDecision>();
-    jitResult?.decisions.forEach((decision) => {
-      if (decision.shipId) map.set(decision.shipId, decision);
-    });
-    return map;
-  }, [jitResult]);
   const routeOverlays = useMemo<RouteScenarioMapOverlay[]>(() => {
     if (!routeResult) return [];
     return routeResult.results.flatMap((shipResult) =>
@@ -283,25 +209,18 @@ export default function SimulationPage() {
     addSimulatedShip(input);
     setPendingPosition(null);
     setLiveImportOpen(false);
-    resetSimulationJit();
     resetRouteScenarios();
   }
 
   function removeShip(id: string) {
     removeSimulatedShip(id);
-    resetSimulationJit();
     resetRouteScenarios();
   }
 
   function clearAll() {
     if (simulatedShips.length === 0) return;
     clearSimulatedShips();
-    resetSimulationJit();
     resetRouteScenarios();
-  }
-
-  async function runJitSimulation() {
-    await requestJitSimulation(simulatedShips);
   }
 
   async function runRouteScenarios() {
@@ -390,9 +309,9 @@ export default function SimulationPage() {
         </main>
 
         <aside style={{ display: "flex", flexDirection: "column", minHeight: 0, gap: 12, overflowY: "auto", paddingRight: 2 }}>
-          {/* 시뮬레이션 함대 요약 */}
-          <section style={cardStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          {/* 시뮬레이션 함대 관리 */}
+          <section style={{ ...cardStyle, flex: "0 0 auto", display: "flex", flexDirection: "column", minHeight: 300, maxHeight: 460 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
               <div>
                 <div style={{ color: muted, fontSize: 11, fontWeight: 800, letterSpacing: ".06em" }}>SIMULATION FLEET</div>
                 <div style={{ marginTop: 3, fontSize: 24, fontWeight: 800, color: LT.ink }}>
@@ -400,7 +319,7 @@ export default function SimulationPage() {
                   <span style={{ fontSize: 13, color: muted, fontWeight: 700, marginLeft: 3 }}>척</span>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
                 <button
                   type="button"
                   onClick={() => setLiveImportOpen(true)}
@@ -431,45 +350,9 @@ export default function SimulationPage() {
             <p style={{ margin: "12px 0 0", color: muted, fontSize: 11.5, lineHeight: 1.5 }}>
               저장 위치는 브라우저 localStorage입니다. Supabase ships 테이블에는 저장하지 않으며, LIVE SNAPSHOT 항목은 원본 실제 선박 데이터를 수정하지 않습니다.
             </p>
-          </section>
 
-          {/* JIT 계산 */}
-          <section style={cardStyle}>
-            <PanelHeader
-              title="JIT 계산"
-              desc="생성한 가상 선박을 선택 도착지의 현재 Port-MIS 혼잡도와 결합해 JIT 감속 권고를 계산합니다."
-              action={<RunButton label={jitLoading ? "계산 중" : "JIT 계산 실행"} onClick={runJitSimulation} disabled={jitLoading} tone="blue" />}
-            />
-            {jitError && <div style={{ marginTop: 10, color: LT.red, fontSize: 12, fontWeight: 700 }}>{jitError}</div>}
-            {jitNotice && <div style={{ marginTop: 10, color: "#9a6a12", fontSize: 12, lineHeight: 1.45 }}>{jitNotice}</div>}
-            {jitResult?.validation && jitResult.validation.rejectedCount > 0 && (
-              <div style={{ marginTop: 10, color: "#b45309", fontSize: 11.5, lineHeight: 1.45 }}>
-                입력 검증에서 {jitResult.validation.rejectedCount}척이 제외되었습니다.
-              </div>
-            )}
-          </section>
+            <div style={{ height: 1, background: LT.borderColor, margin: "14px 0 12px" }} />
 
-          {/* 친환경 입항 경로 추천 */}
-          <section style={cardStyle}>
-            <PanelHeader
-              title="친환경 입항 경로 추천"
-              desc="선택 도착지의 해수부 지정항로(항만가이드라인)를 거리·혼잡도·예상 대기·연료·CO₂ 기준으로 비교합니다. JIT는 감속 권고, 경로 추천은 지정항로 비교입니다."
-              action={<RunButton label={routeLoading ? "계산 중" : "경로 추천 계산"} onClick={runRouteScenarios} disabled={routeLoading} tone="green" />}
-            />
-            <div style={{ marginTop: 12 }}>
-              <ClimateOverridePanel value={climateOverride} onChange={setClimateOverride} />
-            </div>
-            {routeError && <div style={{ marginTop: 10, color: LT.red, fontSize: 12, fontWeight: 700 }}>{routeError}</div>}
-            {routeNotice && <div style={{ marginTop: 10, color: "#9a6a12", fontSize: 12, lineHeight: 1.45 }}>{routeNotice}</div>}
-            {routeResult?.validation && routeResult.validation.rejectedCount > 0 && (
-              <div style={{ marginTop: 10, color: "#b45309", fontSize: 11.5, lineHeight: 1.45 }}>
-                입력 검증에서 {routeResult.validation.rejectedCount}척이 경로 추천 계산에서 제외되었습니다.
-              </div>
-            )}
-          </section>
-
-          {/* 가상 선박 목록 */}
-          <section style={{ ...cardStyle, flex: "0 0 auto", maxHeight: 320, display: "flex", flexDirection: "column", minHeight: 180 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: LT.ink }}>가상 선박 목록</h2>
               <span style={{ color: muted, fontSize: 11, fontWeight: 700 }}>운영자 검토용</span>
@@ -478,10 +361,8 @@ export default function SimulationPage() {
             {!hydrated || simulatedShips.length === 0 ? (
               <EmptyState />
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 9, overflowY: "auto", paddingRight: 2 }}>
+              <div style={{ display: "flex", flex: "1 1 auto", flexDirection: "column", gap: 9, overflowY: "auto", paddingRight: 2, minHeight: 0 }}>
                 {simulatedShips.map((ship) => {
-                  const decision = decisionsByShipId.get(ship.id);
-                  const stateLabel = jitLoading ? "계산 중" : decision ? "JIT 권고" : jitResult ? "권고 없음" : "계산 대기";
                   const destinationShort = simulationDestinationShort(ship.destinationPortId);
                   const snapshot = ship.source === "ais-snapshot";
                   const typeLabel = ship.vesselType ? SIMULATED_VESSEL_TYPE_LABELS[ship.vesselType] : "선종 -";
@@ -503,7 +384,6 @@ export default function SimulationPage() {
                       <div style={{ flex: "none", textAlign: "right" }}>
                         <div style={{ fontSize: 13, fontWeight: 800, color: LT.blue }}>{destinationShort}</div>
                         <div style={{ marginTop: 3, color: muted, fontSize: 12 }}>{ship.sog} kn</div>
-                        <div style={{ marginTop: 3, fontSize: 10, fontWeight: 800, color: decision ? LT.blue : muted }}>{stateLabel}</div>
                       </div>
                       <button
                         type="button"
@@ -534,89 +414,26 @@ export default function SimulationPage() {
             )}
           </section>
 
-          {/* JIT 시뮬레이션 결과 */}
-          <section style={{ ...cardStyle, flex: "0 0 auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: LT.ink }}>JIT 시뮬레이션 결과</h2>
-              {jitResult && <span style={{ color: muted, fontSize: 10.5 }}>{formatDateTime(jitResult.lastUpdated)}</span>}
+          {/* 친환경 입항 경로 추천 */}
+          <section style={{ ...cardStyle, flex: "0 0 auto", display: "flex", flexDirection: "column", minHeight: 340 }}>
+            <PanelHeader
+              title="친환경 입항 경로 추천"
+              desc="선택 도착지의 해수부 지정항로(항만가이드라인)를 거리·혼잡도·예상 대기·연료·CO₂ 기준으로 비교합니다."
+              action={<RunButton label={routeLoading ? "계산 중" : "경로 추천 계산"} onClick={runRouteScenarios} disabled={routeLoading} tone="green" />}
+            />
+            <div style={{ marginTop: 12 }}>
+              <ClimateOverridePanel value={climateOverride} onChange={setClimateOverride} />
             </div>
-
-            {!jitResult ? (
-              <div style={{ color: muted, fontSize: 12.5, lineHeight: 1.6 }}>
-                JIT 계산 실행 후 권고 속도, 조정 ETA, 대기시간 감소, 연료 절감량, CO₂ 감축량이 여기에 표시됩니다.
-              </div>
-            ) : jitResult.summary.recommendedCount === 0 ? (
-              <div style={{ color: LT.inkSoft, fontSize: 12.5, lineHeight: 1.6 }}>
-                <strong style={{ color: LT.ink }}>현재 생성된 가상 선박 기준으로 JIT 감속 권고가 없습니다.</strong>
-                <br />
-                {jitResult.emptyReason?.description}
-                {(jitResult.summary.byDestination ?? []).map((item) => {
-                  const congestion = jitResult.destinationCongestion?.[item.destinationPortId];
-                  return (
-                    <div key={item.destinationPortId} style={{ marginTop: 10, color: muted }}>
-                      {item.destinationPortName} 현재 혼잡도 {congestion ? Math.round(congestion.level * 100) : "-"}% · 후보 {item.candidateCount}척 · 권고 {item.recommendedCount}척
-                    </div>
-                  );
-                })}
-                {jitResult.emptyReason?.suggestions?.slice(0, 2).map((suggestion) => (
-                  <div key={suggestion} style={{ marginTop: 6, color: muted }}>
-                    {suggestion}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {jitResult.summary.byDestination?.length ? (
-                  <div style={{ borderRadius: 12, background: LT.blueSoft, padding: 11, color: "#1e40af", fontSize: 12, lineHeight: 1.45 }}>
-                    계산 기준 · 선택 도착지의 현재 Port-MIS 혼잡도
-                    <br />
-                    {(jitResult.summary.byDestination ?? [])
-                      .map((item) => {
-                        const congestion = jitResult.destinationCongestion?.[item.destinationPortId];
-                        return `${item.destinationPortName} ${congestion ? Math.round(congestion.level * 100) : "-"}%${congestion ? ` · ${congestion.status}` : ""}`;
-                      })
-                      .join(" / ")}
-                  </div>
-                ) : null}
-
-                {jitResult.decisions.map((decision) => (
-                  <article key={decision.shipId ?? decision.shipName} style={{ borderRadius: 12, border, background: "#fff", padding: 13 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 11 }}>
-                      <SimBadge source={decision.scenarioSource ?? "manual"} />
-                      <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 800, color: LT.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {decision.shipName}
-                      </div>
-                      <span style={{ color: LT.blue, fontSize: 10.5, fontWeight: 800 }}>{decision.confidence}</span>
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <ResultTile label="권고 속도" value={`${decision.currentSpeedKn} → ${decision.recommendedSpeedKn}`} unit="kn" />
-                      <ResultTile label="조정 ETA" value={formatEtaShort(decision.recommendedEta)} />
-                      <ResultTile label="대기 감소" value={`-${decision.reducedWaitingMinutes}`} unit="분" tone="green" />
-                      <ResultTile label="연료 절감" value={formatTonneDelta(decision.estimatedFuelSavedKg)} unit="t" tone="green" />
-                      <ResultTile label="CO₂ 감축" value={formatTonneDelta(decision.estimatedCo2ReducedKg)} unit="t" tone="green" full />
-                    </div>
-
-                    <div style={{ marginTop: 10, color: muted, fontSize: 11.5, lineHeight: 1.55 }}>
-                      {decision.destinationPortName ?? simulationDestinationName(decision.destinationPortId)} · 거리 {decision.distanceNm}NM · 현재 혼잡 {Math.round(decision.currentCongestionLevel * 100)}% {decision.currentCongestionStatus} · 기준 {destinationBasisLabel(decision.congestionBasis)}
-                    </div>
-                    {decision.reasons?.slice(0, 2).map((reason) => (
-                      <div key={reason} style={{ marginTop: 6, color: muted, fontSize: 11, lineHeight: 1.4 }}>
-                        · {reason}
-                      </div>
-                    ))}
-                  </article>
-                ))}
-
-                <div style={{ color: "#9a6a12", fontSize: 11.5, lineHeight: 1.5 }}>
-                  이 결과는 실제 선박 데이터 또는 사용자가 만든 시나리오를 기반으로 한 시뮬레이션 추정값이며 실제 운항 지시가 아닙니다.
-                </div>
+            {routeError && <div style={{ marginTop: 10, color: LT.red, fontSize: 12, fontWeight: 700 }}>{routeError}</div>}
+            {routeNotice && <div style={{ marginTop: 10, color: "#9a6a12", fontSize: 12, lineHeight: 1.45 }}>{routeNotice}</div>}
+            {routeResult?.validation && routeResult.validation.rejectedCount > 0 && (
+              <div style={{ marginTop: 10, color: "#b45309", fontSize: 11.5, lineHeight: 1.45 }}>
+                입력 검증에서 {routeResult.validation.rejectedCount}척이 경로 추천 계산에서 제외되었습니다.
               </div>
             )}
-          </section>
 
-          {/* 친환경 경로 추천 결과 — 경로 디자인(RouteScenarioResults)은 요청대로 그대로 둔다. */}
-          <section style={{ ...cardStyle, flex: "0 0 auto", minHeight: 240 }}>
+            <div style={{ height: 1, background: LT.borderColor, margin: "14px 0 12px" }} />
+
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: LT.ink }}>친환경 경로 추천 결과</h2>
               {routeResult && <span style={{ color: muted, fontSize: 10.5 }}>{formatDateTime(routeResult.lastUpdated)}</span>}
