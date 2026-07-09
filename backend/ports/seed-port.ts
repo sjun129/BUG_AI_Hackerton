@@ -172,35 +172,25 @@ export const BUSAN_PORT: PortConfig = {
     ],
   },
 
-  // 환경차등 입항료 정책(예시값 — 실 항만 요율표로 교체 가능).
-  //  - ratePerGtUsd: GT당 표준 입항료. 5만 GT선 → 약 $17,500 수준이 되도록 0.35로 근사.
-  //  - carbonPriceUsdPerTon: 탄소부담금 단가. EU ETS 2026 EUA(~$90/tCO2) 참조.
-  //  - gradeMultiplier: CII 등급 차등. A −15% 할인 ~ E +15% 할증(그린포트 인센티브 구조 근사).
+  // 정박료 + 탄소 그림자가격 정책 — 출처를 밝힐 수 있는 실측/시세 값만 남겼다.
+  // (예선료·선원인건비·대기(체선)비용·냉동컨테이너 전력비는 신뢰할 만한 공개 요율 자료를
+  //  찾지 못해 모델에서 제외했다. 임의 추정치를 "공식 수치"처럼 내놓지 않기 위한 결정.)
+  //
+  //  - foreignGoing/coastal: 해양수산부 고시 제2018-174호 [별표1]
+  //    "무역항의 항만시설 사용 및 사용료에 관한 규정"(항만법 시행령 제46조 제2항) 실측 요율.
+  //    정박료 기본료(10톤·12시간당): 외항선 187원, 내항선 61원.
+  //    초과사용료(10톤·1시간당): 외항선 15.7원, 내항선 5.2원. 총톤수 150톤 이상 선박 대상.
+  //  - fxKrwPerUsd: 2026-07-07 USD/KRW 시장환율(~1,515.64) 스냅샷. 실시간 아님, 안내용.
+  //  - carbonShadowPriceUsdPerTon: EU ETS 2026년 평균 전망 ~€85/tCO2 × 2026-07-09 EUR/USD
+  //    1.1443 ≈ $97/tCO2. 부산항이 실제 부과하는 요금이 아니라 국제 탄소시장 참고 지표.
+  //    (참고: 부산항만공사는 2026-01-01부터 실제 "친환경선박(ESI) 인센티브" 제도를 시행 중이며
+  //    ESI 35~49.9점 5%/50점 이상 10% 항만시설사용료 감면이지만, ESI 산출에 필요한 NOx·SOx·
+  //    육상전원공급 데이터가 없어 이 플랫폼에서는 금액으로 재현하지 않는다.)
   portDue: {
-    ratePerGtUsd: 0.35,
-    carbonPriceUsdPerTon: 90,
-    gradeMultiplier: { A: -0.15, B: -0.075, C: 0, D: 0.075, E: 0.15 },
-  },
-
-  // 입항 부가비용 정책(예시값 — 실 요율표·용선시장 시세로 교체 가능. 업계 통상범위 기반 근사).
-  //  - tugFeeTiers: 예선 2척 왕복(입항+출항) 정액 근사. GT가 클수록 필요 예선 대수·마력 증가.
-  //  - crewDailyWageUsd: 사관·부원 혼합 대표 1인당 1일 인건비(급여+식비 등 근사).
-  //  - defaultCrewBySizeTier: Port-MIS crewCount 미상일 때 쓸 규모별 표준 승무원수.
-  //  - waitingCostUsdPerHourBySizeTier: 대기(체선)로 묶이는 시간의 기회비용 — 용선료 상당 근사.
-  //  - reeferTeuPerGrossTonnage / reeferPowerUsdPerTeuPerHour: 냉동선(reefer)에만 적용.
-  //    8만 GT급 컨테이너선이 냉동 플러그 ~600TEU를 갖는 경우를 기준으로 계수를 역산(0.0075).
-  //    전력비는 플러그당 5~7kW × 산업용 전력단가(~$0.06/kWh) 근사.
-  portCallCost: {
-    tugFeeTiers: [
-      { maxGrossTonnage: 10_000, feeUsd: 1_200 },
-      { maxGrossTonnage: 30_000, feeUsd: 2_200 },
-      { maxGrossTonnage: 80_000, feeUsd: 3_800 },
-      { maxGrossTonnage: Infinity, feeUsd: 5_500 },
-    ],
-    crewDailyWageUsd: 220,
-    defaultCrewBySizeTier: { small: 15, medium: 20, large: 24 },
-    waitingCostUsdPerHourBySizeTier: { small: 300, medium: 800, large: 1_800 },
-    reeferTeuPerGrossTonnage: 0.0075,
-    reeferPowerUsdPerTeuPerHour: 0.35,
+    minGrossTonnageForFee: 150,
+    foreignGoing: { base10TonPer12hKrw: 187, excess10TonPer1hKrw: 15.7 },
+    coastal: { base10TonPer12hKrw: 61, excess10TonPer1hKrw: 5.2 },
+    fxKrwPerUsd: 1515.64,
+    carbonShadowPriceUsdPerTon: 97,
   },
 };

@@ -1,31 +1,21 @@
-// 입항 1건의 총 비용(운영자 관점) — ML 없이 결정론적. 기존 연료·탄소 모델을 재사용하고
-// 예선료·대기(체선)비용·선원 인건비·냉동컨테이너 전력비를 더해 "총 입항 비용" 내역을 만든다.
+// 입항 1건의 비용(운영자 관점) — ML 없이 결정론적. 실제 출처를 밝힐 수 있는 항목만 다룬다.
 //
 // 구성 항목과 근거:
 //   1) 항해 연료비 — fuel.ts voyageFuelTon() × 연료단가. 항해 구간(distanceNm)이 있을 때만.
-//   2) 정박 연료비 — fuel.ts hotelingFuelRate() × 정박시간 × 연료단가("정박 중 연료소비"의 비용화).
-//   3) 입항료(+환경차등) — carbon-port-due.ts computeCarbonPortDue() 그대로 재사용
-//      (표준 입항료 + 탄소부담금 + CII 등급 차등을 이미 계산해 준다).
-//   4) 예선료 — GT 구간별 정액(seed-port.ts portCallCost.tugFeeTiers).
-//   5) 대기(체선)비용 — "대기시간"으로 지정한 구간에 규모별 시간당 기회비용을 곱한다(용선료 상당 근사).
-//   6) 선원 인건비 — crewCount(또는 규모별 대체값) × 일당 × 재항일수.
-//   7) 냉동컨테이너 전력비 — 냉동선(reefer)에만: GT→TEU 근사 × 시간당 전력단가 × 정박시간.
+//   2) 정박 연료비 — fuel.ts hotelingFuelRate() × 정박시간 × 연료단가.
+//   3) 정박료(mooringFee) — carbon-port-due.ts computeCarbonPortDue() 재사용.
+//      해양수산부 고시 실제 요율(신뢰도 높음).
+//   4) 탄소 그림자가격(carbonShadowCost) — 같은 computeCarbonPortDue()가 함께 계산한다.
+//      부산항이 실제로 부과하는 금액이 아니므로 totalUsd에는 넣지 않고
+//      totalWithCarbonShadowUsd(참고 시나리오)에만 별도로 더한다.
 //
-// 각 항목은 개별 함수로도 export해 필요한 부분만 재사용할 수 있게 한다.
+// ⚠️ 애초 검토했던 예선료·선원 인건비·대기(체선)비용·냉동컨테이너 전력비는 신뢰할 만한
+//    공개 요율 자료(부산항 예선료 절대 요율표, 선원 임금 통계, GT→냉동TEU 환산 등)를
+//    찾지 못해 이 모델에서 제외했다. 확인 안 된 추정치를 비용 항목으로 내놓지 않기 위함이다.
 
 import type { PortConfig } from "../ports/port-types";
-import { normalizeVesselType } from "../data/energy";
 import { FUEL_PRICE_USD_PER_TON, hotelingFuelRate, voyageFuelTon, type FuelType } from "./fuel";
 import { computeCarbonPortDue, type CarbonPortDue } from "./carbon-port-due";
-
-type SizeTier = "small" | "medium" | "large";
-
-// fuel.ts의 비공개 sizeTier와 동일 경계(<10,000 / <50,000 / 이상)를 써서 두 모델의 규모 구분을 맞춘다.
-function sizeTier(grossTonnage: number): SizeTier {
-  if (grossTonnage < 10_000) return "small";
-  if (grossTonnage < 50_000) return "medium";
-  return "large";
-}
 
 function round(value: number, digits = 0): number {
   const factor = 10 ** digits;
@@ -38,47 +28,14 @@ export interface FuelCostLeg {
   costUsd: number;
 }
 
-/** GT 구간별 정액 예선료. tiers는 maxGrossTonnage 오름차순이어야 한다. */
-export function computeTugFeeUsd(grossTonnage: number, config: PortConfig): number {
-  const tier = config.portCallCost.tugFeeTiers.find((t) => grossTonnage <= t.maxGrossTonnage);
-  return tier?.feeUsd ?? config.portCallCost.tugFeeTiers[config.portCallCost.tugFeeTiers.length - 1]?.feeUsd ?? 0;
-}
-
-/** 대기(체선)시간 × 규모별 시간당 기회비용(용선료 상당 근사). */
-export function computeWaitingCostUsd(waitingHours: number, grossTonnage: number, config: PortConfig): number {
-  const rate = config.portCallCost.waitingCostUsdPerHourBySizeTier[sizeTier(grossTonnage)];
-  return Math.max(0, waitingHours) * rate;
-}
-
-/** 선원 인건비 = 인원수(실측 또는 규모별 대체값) × 일당 × 재항일수. */
-export function computeCrewLaborCostUsd(
-  berthHours: number,
-  grossTonnage: number,
-  config: PortConfig,
-  crewCount?: number
-): number {
-  const crew = crewCount ?? config.portCallCost.defaultCrewBySizeTier[sizeTier(grossTonnage)];
-  const days = Math.max(0, berthHours) / 24;
-  return crew * config.portCallCost.crewDailyWageUsd * days;
-}
-
-/** 냉동컨테이너 전력비 — 냉동선(reefer)에만 적용. GT→TEU 근사 × 시간당 전력단가 × 정박시간. */
-export function computeReeferPowerCostUsd(vesselType: string | undefined, grossTonnage: number, berthHours: number, config: PortConfig): number {
-  if (normalizeVesselType(vesselType) !== "reefer") return 0;
-  const { reeferTeuPerGrossTonnage, reeferPowerUsdPerTeuPerHour } = config.portCallCost;
-  const reeferTeu = grossTonnage * reeferTeuPerGrossTonnage;
-  return reeferTeu * reeferPowerUsdPerTeuPerHour * Math.max(0, berthHours);
-}
-
 export interface PortCallCostInput {
   vesselType?: string; // 선종명(Port-MIS vsslKndNm)
   grossTonnage: number; // 총톤수
-  crewCount?: number; // 실측 승무원수(없으면 규모별 대체값)
   distanceNm?: number; // 항해 구간 거리(해리). 없으면 항해 연료비는 생략(정박 중심 계산).
   speedKn?: number; // 항해 선속. distanceNm이 있을 때만 사용(기본 12kn).
-  berthHours?: number; // 정박(하역+대기) 총 시간. 기본은 항만 평균 재항시간(dwellMedianHours).
-  waitingHours?: number; // berthHours 중 "대기(체선)"로 볼 시간. 기본 0(전부 정상 하역으로 봄).
-  year?: number; // CII 등급 산정 연도(carbon-port-due.ts로 위임, 기본 현재 연도)
+  berthHours?: number; // 정박 총 시간. 기본은 항만 평균 재항시간(dwellMedianHours).
+  isForeignGoing?: boolean; // 외항선 여부(기본 true) — 정박료 요율 구분에 사용.
+  year?: number; // CII 등급 산정 연도(carbon-port-due.ts로 위임, 정보 표시용)
 }
 
 export interface PortCallCostBreakdown {
@@ -86,20 +43,16 @@ export interface PortCallCostBreakdown {
   berthHours: number;
   voyageFuel: FuelCostLeg | null; // distanceNm 없으면 null
   hotelingFuel: FuelCostLeg;
-  portDue: CarbonPortDue; // 표준 입항료 + 탄소부담금 + CII 등급 차등(전체 내역 포함)
-  tugFeeUsd: number;
-  waitingCostUsd: number;
-  crewLaborCostUsd: number;
-  reeferPowerCostUsd: number;
-  totalUsd: number;
+  portDue: CarbonPortDue; // 정박료(실제) + 탄소 그림자가격(참고) 상세 내역
+  totalUsd: number; // 연료비 + 정박료(실제 요율 기준) — 실비용에 가까운 합계
+  totalWithCarbonShadowUsd: number; // totalUsd + 탄소 그림자가격(참고 시나리오, 실제 청구 아님)
   note: string;
 }
 
-/** 입항 1건의 비용 항목을 전부 계산해 합산한다. 각 항목은 위 개별 함수들의 조합이다. */
+/** 입항 1건의 연료비·정박료를 계산해 합산한다. 탄소 그림자가격은 별도 필드로만 더한다. */
 export function computePortCallCost(input: PortCallCostInput, config: PortConfig): PortCallCostBreakdown {
   const grossTonnage = Math.max(0, input.grossTonnage);
   const berthHours = input.berthHours ?? config.portCallCapacity.dwellMedianHours;
-  const waitingHours = Math.min(input.waitingHours ?? 0, berthHours);
 
   const voyageFuel: FuelCostLeg | null =
     input.distanceNm != null && input.distanceNm > 0
@@ -119,27 +72,19 @@ export function computePortCallCost(input: PortCallCostInput, config: PortConfig
     costUsd: round(hotelTonnage * FUEL_PRICE_USD_PER_TON[hotel.fuelType]),
   };
 
-  const portDue = computeCarbonPortDue({ vesselType: input.vesselType, grossTonnage, berthHours, year: input.year }, config);
-  const tugFeeUsd = round(computeTugFeeUsd(grossTonnage, config));
-  const waitingCostUsd = round(computeWaitingCostUsd(waitingHours, grossTonnage, config));
-  const crewLaborCostUsd = round(computeCrewLaborCostUsd(berthHours, grossTonnage, config, input.crewCount));
-  const reeferPowerCostUsd = round(computeReeferPowerCostUsd(input.vesselType, grossTonnage, berthHours, config));
-
-  const totalUsd = round(
-    (voyageFuel?.costUsd ?? 0) +
-      hotelingFuel.costUsd +
-      portDue.totalDueUsd +
-      tugFeeUsd +
-      waitingCostUsd +
-      crewLaborCostUsd +
-      reeferPowerCostUsd
+  const portDue = computeCarbonPortDue(
+    { vesselType: input.vesselType, grossTonnage, berthHours, isForeignGoing: input.isForeignGoing, year: input.year },
+    config
   );
 
-  const note = `입항료 $${portDue.totalDueUsd.toLocaleString("en-US")}(${portDue.note}) · 예선료 $${tugFeeUsd.toLocaleString(
+  const totalUsd = round((voyageFuel?.costUsd ?? 0) + hotelingFuel.costUsd + portDue.mooringFeeUsdApprox);
+  const totalWithCarbonShadowUsd = round(totalUsd + portDue.carbonShadowCostUsd);
+
+  const note = `정박료 ${portDue.mooringFeeKrw.toLocaleString("ko-KR")}원(≈$${portDue.mooringFeeUsdApprox.toLocaleString(
     "en-US"
-  )} · 정박연료 $${hotelingFuel.costUsd.toLocaleString("en-US")}${
-    waitingHours > 0 ? ` · 대기비용 $${waitingCostUsd.toLocaleString("en-US")}` : ""
-  }${reeferPowerCostUsd > 0 ? ` · 냉동전력 $${reeferPowerCostUsd.toLocaleString("en-US")}` : ""}`;
+  )}) · 정박연료 $${hotelingFuel.costUsd.toLocaleString("en-US")}${
+    voyageFuel ? ` · 항해연료 $${voyageFuel.costUsd.toLocaleString("en-US")}` : ""
+  } · 탄소 그림자가격 $${portDue.carbonShadowCostUsd.toLocaleString("en-US")}(참고, totalUsd에 미포함)`;
 
   return {
     grossTonnage,
@@ -147,11 +92,8 @@ export function computePortCallCost(input: PortCallCostInput, config: PortConfig
     voyageFuel,
     hotelingFuel,
     portDue,
-    tugFeeUsd,
-    waitingCostUsd,
-    crewLaborCostUsd,
-    reeferPowerCostUsd,
     totalUsd,
+    totalWithCarbonShadowUsd,
     note,
   };
 }

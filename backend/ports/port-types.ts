@@ -81,38 +81,24 @@ export interface CollisionRiskThresholds {
   minMonitoredGrossTonnage: number;
 }
 
-// 환경차등 입항료 정책 — CO2 배출·CII 등급에 따라 입항료를 할인/할증한다(그린포트 정책값).
-// 요율·탄소가격은 항만 고유 정책이라 seed-port.ts 에 둔다(데이터/코드 분리).
+// 정박료(항만시설사용료) 요율 — 해양수산부 고시 "무역항의 항만시설 사용 및 사용료에 관한
+// 규정"(고시 제2018-174호, 항만법 시행령 제46조 제2항)의 실제 요율 구조를 그대로 쓴다.
+// "10톤당·12시간당" 기본료 + 12시간 초과분에 대한 "10톤당·1시간당" 초과사용료로 구성된다.
+export interface MooringFeeRate {
+  base10TonPer12hKrw: number; // 기본료(10톤·12시간당, KRW)
+  excess10TonPer1hKrw: number; // 초과사용료(10톤·1시간당, KRW)
+}
+
+// 정박료 + 탄소 그림자가격(참고용) 정책. 요율·환율·탄소 시장가는 실측/시세라 seed-port.ts 에 둔다.
+//   - foreignGoing/coastal: 해수부 고시 실제 요율(외항선/내항선 구분). 신뢰도 높음.
+//   - carbonShadowPriceUsdPerTon: 부산항이 실제 부과하는 금액이 아니라, 국제 탄소시장(EU ETS)
+//     가격을 적용했을 때의 참고 시나리오 지표(shadow price)다.
 export interface PortDuePolicy {
-  ratePerGtUsd: number; // 표준 입항료 = GT × 이 값 (USD)
-  carbonPriceUsdPerTon: number; // 탄소부담금 단가 (USD / tCO2)
-  // CII 등급(A~E)별 표준 입항료 대비 차등율. 음수=할인(청정선), 양수=할증(저효율선).
-  gradeMultiplier: { A: number; B: number; C: number; D: number; E: number };
-}
-
-// 총톤수(GT) 구간별 정액 요금 — 예선료처럼 "이 GT 이하까지 이 요금" 형태의 계단식 요율에 쓴다.
-// 배열은 maxGrossTonnage 오름차순, 마지막 항목의 maxGrossTonnage=Infinity로 상한을 연다.
-export interface GrossTonnageFeeTier {
-  maxGrossTonnage: number;
-  feeUsd: number;
-}
-
-// 선박 규모(소/중/대) 3단계 대표값 — fuel.ts SizeTier(<10,000 / <50,000 / 이상)와 동일 경계를 쓴다.
-export interface SizeTierValue {
-  small: number;
-  medium: number;
-  large: number;
-}
-
-// 입항 1건의 부가 비용 정책 — 예선료·대기(체선)비용·선원 인건비·냉동컨테이너 전력비.
-// 연료비·탄소비용(입항료)은 각각 fuel.ts/carbon-port-due.ts가 별도로 계산하므로 여기 포함하지 않는다.
-export interface PortCallCostPolicy {
-  tugFeeTiers: GrossTonnageFeeTier[]; // GT 구간별 예선료(입출항 왕복, 정액)
-  crewDailyWageUsd: number; // 선원 1인당 1일 인건비(USD, 사관·부원 혼합 대표단가)
-  defaultCrewBySizeTier: SizeTierValue; // 승무원수(crewCount) 미상일 때 대체할 규모별 인원수
-  waitingCostUsdPerHourBySizeTier: SizeTierValue; // 대기(체선) 시간당 기회비용(용선료 상당 근사)
-  reeferTeuPerGrossTonnage: number; // GT → 냉동컨테이너(TEU) 근사 계수. 냉동선(reefer)에만 적용.
-  reeferPowerUsdPerTeuPerHour: number; // 냉동 플러그 1TEU당 시간당 전력비용(USD)
+  minGrossTonnageForFee: number; // 이 총톤수 미만은 정박료 부과 대상 아님(해수부 고시 기준)
+  foreignGoing: MooringFeeRate;
+  coastal: MooringFeeRate;
+  fxKrwPerUsd: number; // 참고 환산용 원/달러 환율(고정 스냅샷, 안내용)
+  carbonShadowPriceUsdPerTon: number; // EU ETS 시장가 기준 참고 탄소가격(USD/tCO2)
 }
 
 // 동시 재항 척수 용량 — 2019~2024 부산항만공사 입출항 집계 27만건에서 오프라인 산출한
@@ -234,8 +220,7 @@ export interface PortConfig {
   simulationDestinations: SimulationDestinationPort[]; // /simulation 가상 선박 도착지 선택지
   approachRoutes: ApproachRoute[]; // /simulation 사전 정의 접근 경로 후보
   portCallCapacity: PortCallCapacity; // 동시 재항 용량·대기 보정(입출항 집계 실측)
-  portDue: PortDuePolicy; // 환경차등 입항료 정책(탄소부담금·CII 등급 차등)
-  portCallCost: PortCallCostPolicy; // 입항 부가비용 정책(예선료·대기비용·인건비·냉동컨테이너 전력비)
+  portDue: PortDuePolicy; // 정박료(해수부 고시 실제 요율) + 탄소 그림자가격(참고)
 }
 
 export interface CongestionPoint {

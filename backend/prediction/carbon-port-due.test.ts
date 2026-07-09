@@ -1,53 +1,59 @@
 import assert from "node:assert/strict";
 import { BUSAN_PORT } from "../ports/seed-port";
-import { computeCiiStatus } from "./cii";
 import { computeCarbonPortDue } from "./carbon-port-due";
 
 const policy = BUSAN_PORT.portDue;
 
-// ── 1) 기본 관계: baseDue=GT×rate, total=base+carbonCost, carbonCost=levy+gradeAdj ──
+// ── 1) 정박료 공식: GT/10 × (기본 12h요율 + 초과시간 × 초과요율) — 해수부 고시 구조 그대로 ──
 {
-  const r = computeCarbonPortDue({ vesselType: "컨테이너선", grossTonnage: 50000, berthHours: 24, year: 2026 }, BUSAN_PORT);
-  assert.equal(r.baseDueUsd, Math.round(50000 * policy.ratePerGtUsd), "표준 입항료 = GT × 요율");
-  assert.ok(r.carbonLevyUsd >= 0, "탄소부담금 ≥ 0");
-  assert.ok(Math.abs(r.carbonCostUsd - (r.carbonLevyUsd + r.gradeAdjustmentUsd)) <= 1, "탄소비용 = 부담금 + 등급차등");
-  assert.ok(Math.abs(r.totalDueUsd - (r.baseDueUsd + r.carbonCostUsd)) <= 1, "최종 = 표준 + 탄소비용");
-  assert.ok(Math.abs(r.changePct - (r.carbonCostUsd / r.baseDueUsd) * 100) <= 0.2, "변화율 일관");
-  // 등급이 cii.ts 결과와 일치
-  assert.equal(r.ciiGrade, computeCiiStatus("컨테이너선", 50000, 2026)?.grade ?? null);
+  const r = computeCarbonPortDue({ vesselType: "컨테이너선", grossTonnage: 50000, berthHours: 24, isForeignGoing: true }, BUSAN_PORT);
+  const units10Ton = 50000 / 10;
+  const expectedKrw = units10Ton * policy.foreignGoing.base10TonPer12hKrw + units10Ton * 12 * policy.foreignGoing.excess10TonPer1hKrw;
+  assert.equal(r.mooringFeeKrw, Math.round(expectedKrw), "정박료 = 기본료 + 초과시간 가산");
+  assert.ok(Math.abs(r.mooringFeeUsdApprox - r.mooringFeeKrw / policy.fxKrwPerUsd) <= 1, "USD 환산 일관");
 }
 
-// ── 2) 배출 단조성: 큰 배가 더 많이 배출 → 탄소부담금 더 큼 ──
+// ── 2) 외항선 요율이 내항선보다 높다(해수부 고시: 187원 > 61원, 15.7원 > 5.2원) ──
+{
+  const foreign = computeCarbonPortDue({ grossTonnage: 50000, berthHours: 24, isForeignGoing: true }, BUSAN_PORT);
+  const coastal = computeCarbonPortDue({ grossTonnage: 50000, berthHours: 24, isForeignGoing: false }, BUSAN_PORT);
+  assert.ok(foreign.mooringFeeKrw > coastal.mooringFeeKrw, "외항선 요율이 더 높음");
+}
+
+// ── 3) 총톤수 150톤 미만은 정박료 면제(해수부 고시 기준) ──
+{
+  const r = computeCarbonPortDue({ grossTonnage: 100, berthHours: 24 }, BUSAN_PORT);
+  assert.equal(r.mooringFeeKrw, 0, "150톤 미만 면제");
+}
+
+// ── 4) 정박 12시간 이내면 초과요금 없음, 12시간 초과분부터 가산 ──
+{
+  const within12h = computeCarbonPortDue({ grossTonnage: 50000, berthHours: 10 }, BUSAN_PORT);
+  const exactly12h = computeCarbonPortDue({ grossTonnage: 50000, berthHours: 12 }, BUSAN_PORT);
+  const over12h = computeCarbonPortDue({ grossTonnage: 50000, berthHours: 20 }, BUSAN_PORT);
+  assert.equal(within12h.mooringFeeKrw, exactly12h.mooringFeeKrw, "12시간 이내는 기본료로 동일");
+  assert.ok(over12h.mooringFeeKrw > exactly12h.mooringFeeKrw, "12시간 초과분은 가산");
+}
+
+// ── 5) 탄소 그림자가격: 배출 CO2에 비례, 정박료와는 별도 필드(합산해서 숨기지 않음) ──
 {
   const small = computeCarbonPortDue({ vesselType: "컨테이너선", grossTonnage: 20000, berthHours: 24 }, BUSAN_PORT);
   const large = computeCarbonPortDue({ vesselType: "컨테이너선", grossTonnage: 80000, berthHours: 24 }, BUSAN_PORT);
   assert.ok(large.portCallCo2Ton > small.portCallCo2Ton, "큰 배가 더 많이 배출");
-  assert.ok(large.carbonLevyUsd > small.carbonLevyUsd, "큰 배가 부담금 더 큼");
+  assert.ok(large.carbonShadowCostUsd > small.carbonShadowCostUsd, "배출량 클수록 그림자가격 큼");
+  assert.ok(
+    Math.abs(small.carbonShadowCostUsd - small.portCallCo2Ton * policy.carbonShadowPriceUsdPerTon) <= 1,
+    "그림자가격 = CO2 × 단가"
+  );
 }
 
-// ── 3) 정박이 길수록 배출·부담금 증가(표준 입항료는 불변) ──
-{
-  const shortStay = computeCarbonPortDue({ vesselType: "탱커", grossTonnage: 40000, berthHours: 12 }, BUSAN_PORT);
-  const longStay = computeCarbonPortDue({ vesselType: "탱커", grossTonnage: 40000, berthHours: 48 }, BUSAN_PORT);
-  assert.ok(longStay.portCallCo2Ton > shortStay.portCallCo2Ton);
-  assert.ok(longStay.carbonLevyUsd > shortStay.carbonLevyUsd);
-  assert.equal(shortStay.baseDueUsd, longStay.baseDueUsd, "정박시간은 표준 입항료에 영향 없음");
-}
-
-// ── 4) 등급 차등 부호: 청정선(A·B) 할인(−), 저효율선(D·E) 할증(+), C는 0 ──
+// ── 6) CII 등급은 정보로만 표시되고 금액에 반영되지 않는다(cii.ts와 등급 일치, 금액 독립) ──
 {
   const r = computeCarbonPortDue({ vesselType: "벌크선", grossTonnage: 30000, year: 2026 }, BUSAN_PORT);
-  if (r.ciiGrade === "A" || r.ciiGrade === "B") assert.ok(r.gradeAdjustmentUsd < 0, "청정선 할인");
-  if (r.ciiGrade === "D" || r.ciiGrade === "E") assert.ok(r.gradeAdjustmentUsd > 0, "저효율선 할증");
-  if (r.ciiGrade === "C") assert.equal(r.gradeAdjustmentUsd, 0, "C등급 차등 없음");
-}
-
-// ── 5) 선종 미분류 → 등급 없음 → 차등 0, 탄소비용은 부담금만 ──
-{
-  const r = computeCarbonPortDue({ grossTonnage: 5000, berthHours: 20 }, BUSAN_PORT);
-  assert.equal(r.ciiGrade, null, "선종 미상 → 등급 없음");
-  assert.equal(r.gradeAdjustmentUsd, 0, "등급 없으면 차등 0");
-  assert.equal(r.carbonCostUsd, r.carbonLevyUsd, "탄소비용 = 부담금");
+  // 등급이 뭐든(A~E) mooringFeeKrw·carbonShadowCostUsd 계산식엔 등급 변수가 전혀 개입하지 않는다.
+  const sameGtDifferentType = computeCarbonPortDue({ vesselType: "탱커", grossTonnage: 30000, year: 2026 }, BUSAN_PORT);
+  assert.equal(r.mooringFeeKrw, sameGtDifferentType.mooringFeeKrw, "정박료는 선종·등급과 무관(GT·시간만 의존)");
+  assert.ok(r.ciiGrade === null || ["A", "B", "C", "D", "E"].includes(r.ciiGrade));
 }
 
 console.log("carbon-port-due validation passed");
