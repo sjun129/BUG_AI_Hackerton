@@ -1,7 +1,5 @@
 "use client";
 
-// 좌측 아이콘 레일 — 대시보드(지도)와 선박 모니터링 콘솔이 공유한다.
-// href가 있는 항목은 라우팅되고, 없는 항목은 아직 미연결(장식).
 import Link from "next/link";
 
 const muted = "#8aa0c8";
@@ -9,15 +7,15 @@ const panel = "rgba(11,18,34,0.82)";
 const border = "1px solid rgba(120,160,255,0.14)";
 
 export const RAIL_ITEMS: { icon: string; label: string; href?: string }[] = [
-  { icon: "🗺️", label: "관제 지도", href: "/dashboard" },
-  { icon: "🚢", label: "선박 모니터링", href: "/vessel" },
+  { icon: "M", label: "관제 지도", href: "/dashboard" },
+  { icon: "V", label: "선박 모니터링", href: "/vessel" },
   { icon: "S", label: "시뮬레이션", href: "/simulation" },
-  { icon: "⚓", label: "선석 대기" },
-  { icon: "📊", label: "혼잡도 통계", href: "/congestion" },
-  { icon: "⚙️", label: "설정" },
+  { icon: "AI", label: "AI 관제사", href: "/control-room" },
+  { icon: "B", label: "선석 대기" },
+  { icon: "C", label: "혼잡도 통계", href: "/congestion" },
+  { icon: "G", label: "설정" },
 ];
 
-// active: 현재 화면에 해당하는 항목의 href (예: "/vessel")
 export default function LeftRail({ active }: { active: string }) {
   return (
     <div
@@ -56,11 +54,11 @@ export default function LeftRail({ active }: { active: string }) {
       >
         <div style={{ width: 12, height: 12, border: "2.5px solid #fff", borderRadius: "50%", borderRightColor: "transparent" }} />
       </Link>
-      {RAIL_ITEMS.map((item, i) => {
+      {RAIL_ITEMS.map((item, index) => {
         const on = item.href === active;
         const inner = (
           <div
-            key={i}
+            key={index}
             title={item.label}
             style={{
               width: 40,
@@ -69,7 +67,9 @@ export default function LeftRail({ active }: { active: string }) {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 17,
+              fontSize: item.icon.length > 1 ? 12 : 15,
+              fontWeight: 900,
+              letterSpacing: item.icon.length > 1 ? "-.02em" : 0,
               color: on ? "#fff" : muted,
               background: on ? "linear-gradient(135deg,#2f6bff,#5b8cff)" : "transparent",
               cursor: item.href ? "pointer" : "default",
@@ -79,7 +79,7 @@ export default function LeftRail({ active }: { active: string }) {
           </div>
         );
         return item.href ? (
-          <Link key={i} href={item.href} style={{ textDecoration: "none" }}>
+          <Link key={index} href={item.href} style={{ textDecoration: "none" }}>
             {inner}
           </Link>
         ) : (
