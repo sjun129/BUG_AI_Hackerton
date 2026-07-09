@@ -14,7 +14,8 @@ const GREETING: Message = {
     "안녕하세요! PORTIQ AI 어드바이저입니다. 현재 선박·혼잡도 상황을 분석해 운영 권고를 제시합니다. 아래 버튼을 누르거나 메시지를 보내 요청하세요.",
 };
 
-export default function AdvisorPanel() {
+// right: FAB·채팅 패널의 오른쪽 위치(px). 대시보드는 선박 패널 왼쪽에 맞춰 넘겨준다.
+export default function AdvisorPanel({ right = 24 }: { right?: number } = {}) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([GREETING]);
   const [input, setInput] = useState("");
@@ -63,7 +64,7 @@ export default function AdvisorPanel() {
           className="portiq-btn"
           style={{
             position: "fixed",
-            right: 24,
+            right,
             bottom: 24,
             zIndex: 1000,
             display: "flex",
@@ -90,7 +91,7 @@ export default function AdvisorPanel() {
         <div
           style={{
             position: "fixed",
-            right: 24,
+            right,
             bottom: 24,
             zIndex: 1000,
             width: 380,

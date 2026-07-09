@@ -5,6 +5,7 @@ import { DEFAULT_SIMULATION_DESTINATION_ID, SIMULATION_DESTINATION_PORTS } from 
 import type { Ship } from "@/frontend/types/domain";
 import type { NewSimulatedShipInput, SimulatedVesselType, SimulationDestinationPortId } from "@/frontend/types/simulation";
 import { SIMULATED_VESSEL_TYPE_LABELS } from "@/frontend/types/simulation";
+import { LT } from "@/frontend/components/theme";
 
 interface LiveShipImportModalProps {
   open: boolean;
@@ -12,9 +13,10 @@ interface LiveShipImportModalProps {
   onImport: (ship: NewSimulatedShipInput) => void;
 }
 
-const panel = "rgba(11,18,34,.98)";
-const muted = "#8aa0c8";
-const border = "1px solid rgba(120,160,255,.18)";
+const panel = LT.panelSolid;
+const muted = LT.muted;
+const border = LT.border;
+const fieldStyle = { height: 36, borderRadius: 10, border: LT.border, background: "#fff", color: LT.ink, padding: "0 10px", outline: "none", fontSize: 13 } as const;
 
 function normalizeVesselType(value?: string): SimulatedVesselType | undefined {
   const text = (value ?? "").toLowerCase();
@@ -107,20 +109,20 @@ export default function LiveShipImportModal({ open, onCancel, onImport }: LiveSh
   if (!open) return null;
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="실시간 선박 불러오기" style={{ position: "fixed", inset: 0, zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(3,7,18,.68)", backdropFilter: "blur(6px)" }}>
-      <section style={{ width: "min(920px, 100%)", maxHeight: "86vh", display: "flex", flexDirection: "column", borderRadius: 12, border, background: panel, color: "#e7ecf5", boxShadow: "0 24px 70px rgba(0,0,0,.5)", overflow: "hidden" }}>
-        <header style={{ padding: 16, borderBottom: "1px solid rgba(148,163,184,.14)", display: "flex", gap: 12, justifyContent: "space-between" }}>
+    <div role="dialog" aria-modal="true" aria-label="실시간 선박 불러오기" style={{ position: "fixed", inset: 0, zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(15,23,42,.42)", backdropFilter: "blur(6px)" }}>
+      <section style={{ width: "min(920px, 100%)", maxHeight: "86vh", display: "flex", flexDirection: "column", borderRadius: 16, border, background: panel, color: LT.ink, boxShadow: "0 24px 70px rgba(15,23,42,.28)", overflow: "hidden" }}>
+        <header style={{ padding: 16, borderBottom: `1px solid ${LT.borderColor}`, display: "flex", gap: 12, justifyContent: "space-between" }}>
           <div>
-            <div style={{ color: "#38bdf8", fontSize: 11, fontWeight: 900, letterSpacing: ".08em" }}>LIVE SNAPSHOT</div>
-            <h2 style={{ margin: "5px 0 0", fontSize: 20 }}>실시간 선박 불러오기</h2>
+            <div style={{ color: LT.blue, fontSize: 11, fontWeight: 800, letterSpacing: ".08em" }}>LIVE SNAPSHOT</div>
+            <h2 style={{ margin: "5px 0 0", fontSize: 20, fontWeight: 800, color: LT.ink }}>실시간 선박 불러오기</h2>
             <p style={{ margin: "7px 0 0", color: muted, fontSize: 12.5 }}>원본 실제 선박은 수정하지 않고 시뮬레이션용 스냅샷으로만 복사합니다.</p>
           </div>
-          <button type="button" onClick={onCancel} aria-label="닫기" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.04)", color: "#cbd5e1", cursor: "pointer", fontSize: 18 }}>×</button>
+          <button type="button" onClick={onCancel} aria-label="닫기" style={{ width: 32, height: 32, borderRadius: 8, border: LT.border, background: LT.tile, color: LT.inkSoft, cursor: "pointer", fontSize: 18 }}>×</button>
         </header>
 
-        <div style={{ padding: 14, display: "grid", gridTemplateColumns: "minmax(180px,1fr) 180px auto auto", gap: 10, alignItems: "center", borderBottom: "1px solid rgba(148,163,184,.1)" }}>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="선박명 또는 MMSI 검색" style={{ height: 36, borderRadius: 8, border: "1px solid rgba(148,163,184,.24)", background: "rgba(15,23,42,.84)", color: "#e7ecf5", padding: "0 10px", outline: "none" }} />
-          <select value={destinationPortId} onChange={(event) => setDestinationPortId(event.target.value as SimulationDestinationPortId)} style={{ height: 36, borderRadius: 8, border: "1px solid rgba(148,163,184,.24)", background: "rgba(15,23,42,.84)", color: "#e7ecf5", padding: "0 8px" }}>
+        <div style={{ padding: 14, display: "grid", gridTemplateColumns: "minmax(180px,1fr) 180px auto auto", gap: 10, alignItems: "center", borderBottom: `1px solid ${LT.borderColor}` }}>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="선박명 또는 MMSI 검색" style={fieldStyle} />
+          <select value={destinationPortId} onChange={(event) => setDestinationPortId(event.target.value as SimulationDestinationPortId)} style={fieldStyle}>
             {SIMULATION_DESTINATION_PORTS.map((destination) => (
               <option key={destination.id} value={destination.id}>{destination.name}</option>
             ))}
@@ -135,28 +137,28 @@ export default function LiveShipImportModal({ open, onCancel, onImport }: LiveSh
 
         <div style={{ padding: 14, overflowY: "auto" }}>
           {loading ? <p style={{ color: muted }}>불러오는 중...</p> : null}
-          {error ? <p style={{ color: "#fecaca", fontWeight: 800 }}>{error}</p> : null}
+          {error ? <p style={{ color: LT.red, fontWeight: 800 }}>{error}</p> : null}
           {!loading && !error && shown.length === 0 ? <p style={{ color: muted }}>현 시뮬레이션에 추가할 수 있는 실제 선박이 없습니다.</p> : null}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {shown.map((ship) => {
               const valid = canImport(ship);
               const vesselType = normalizeVesselType(ship.vesselType);
               return (
-                <article key={ship.mmsi || ship.name} style={{ display: "grid", gridTemplateColumns: "minmax(0,1.2fr) .8fr .7fr .8fr auto", gap: 10, alignItems: "center", padding: 11, borderRadius: 10, border: "1px solid rgba(148,163,184,.13)", background: "rgba(255,255,255,.035)" }}>
+                <article key={ship.mmsi || ship.name} style={{ display: "grid", gridTemplateColumns: "minmax(0,1.2fr) .8fr .7fr .8fr auto", gap: 10, alignItems: "center", padding: 11, borderRadius: 12, border: LT.border, background: "#fff" }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <span style={{ fontSize: 10, fontWeight: 900, color: "#bfdbfe", background: "rgba(59,130,246,.16)", padding: "3px 7px", borderRadius: 6 }}>LIVE SNAPSHOT</span>
-                      <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ship.name}</strong>
+                      <span style={{ fontSize: 10, fontWeight: 900, color: LT.blue, background: "rgba(37,99,235,.12)", padding: "3px 7px", borderRadius: 6 }}>LIVE SNAPSHOT</span>
+                      <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: LT.ink }}>{ship.name}</strong>
                     </div>
                     <div style={{ marginTop: 5, color: muted, fontSize: 11 }}>MMSI {fmt(ship.mmsi)} · IMO {fmt(ship.imo)} · GT {ship.grossTonnage?.toLocaleString("ko-KR") ?? "-"}</div>
                   </div>
-                  <div style={{ color: "#cbd5e1", fontSize: 12 }}>상태 {ship.status}<br />SOG {ship.sog}kn</div>
-                  <div style={{ color: "#cbd5e1", fontSize: 12 }}>위도 {ship.lat.toFixed(4)}<br />경도 {ship.lon.toFixed(4)}</div>
-                  <div style={{ color: "#cbd5e1", fontSize: 12 }}>선종 {vesselType ? SIMULATED_VESSEL_TYPE_LABELS[vesselType] : "-"}</div>
-                  <button type="button" disabled={!valid} onClick={() => onImport(snapshotInput(ship, destinationPortId))} style={{ height: 34, padding: "0 11px", borderRadius: 8, border: "none", background: valid ? "#38bdf8" : "#334155", color: valid ? "#082f49" : "#94a3b8", fontWeight: 900, cursor: valid ? "pointer" : "not-allowed" }}>
+                  <div style={{ color: LT.inkSoft, fontSize: 12 }}>상태 {ship.status}<br />SOG {ship.sog}kn</div>
+                  <div style={{ color: LT.inkSoft, fontSize: 12 }}>위도 {ship.lat.toFixed(4)}<br />경도 {ship.lon.toFixed(4)}</div>
+                  <div style={{ color: LT.inkSoft, fontSize: 12 }}>선종 {vesselType ? SIMULATED_VESSEL_TYPE_LABELS[vesselType] : "-"}</div>
+                  <button type="button" disabled={!valid} onClick={() => onImport(snapshotInput(ship, destinationPortId))} style={{ height: 34, padding: "0 13px", borderRadius: 10, border: valid ? "none" : LT.border, background: valid ? LT.blue : LT.tile, color: valid ? "#fff" : "#a3aec1", fontWeight: 800, cursor: valid ? "pointer" : "not-allowed" }}>
                     {valid ? "추가" : "추가 불가"}
                   </button>
-                  {!valid && <div style={{ gridColumn: "1 / -1", color: "#fdba74", fontSize: 11 }}>위치 또는 속도 정보가 없어 시뮬레이션에 추가할 수 없습니다.</div>}
+                  {!valid && <div style={{ gridColumn: "1 / -1", color: "#b45309", fontSize: 11 }}>위치 또는 속도 정보가 없어 시뮬레이션에 추가할 수 없습니다.</div>}
                 </article>
               );
             })}
