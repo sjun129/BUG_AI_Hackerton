@@ -75,7 +75,8 @@ function destinationIcon(shortName: string): L.DivIcon {
 
 const simIcon = simulatedShipIcon("SIM");
 const snapshotIcon = simulatedShipIcon("SNAP");
-const basemap = BASEMAPS.find((item) => item.id === "dark" && item.url) ?? BASEMAPS.find((item) => item.url) ?? BASEMAPS[0];
+// 대시보드와 동일한 밝은 배경(CARTO light) — 라이트 테마 시안에 맞춘다. 경로 폴리라인 디자인은 그대로 둔다.
+const basemap = BASEMAPS.find((item) => item.id === "light" && item.url) ?? BASEMAPS.find((item) => item.url) ?? BASEMAPS[0];
 
 function validOverlay(overlay: RouteScenarioMapOverlay): boolean {
   return (

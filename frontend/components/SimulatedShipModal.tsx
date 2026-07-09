@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { DEFAULT_SIMULATION_DESTINATION_ID, SIMULATION_DESTINATION_PORTS } from "@/frontend/config/ports";
 import type { NewSimulatedShipInput, SimulatedVesselType, SimulationDestinationPortId } from "@/frontend/types/simulation";
 import { SIMULATED_VESSEL_TYPE_LABELS, SIMULATED_VESSEL_TYPES } from "@/frontend/types/simulation";
+import { LT } from "@/frontend/components/theme";
 
 interface SimulatedShipModalProps {
   open: boolean;
@@ -16,10 +17,10 @@ interface SimulatedShipModalProps {
 const fieldStyle = {
   width: "100%",
   height: 38,
-  borderRadius: 8,
-  border: "1px solid rgba(148,163,184,.26)",
-  background: "rgba(15,23,42,.84)",
-  color: "#e7ecf5",
+  borderRadius: 10,
+  border: LT.border,
+  background: "#fff",
+  color: LT.ink,
   padding: "0 10px",
   fontSize: 13,
   outline: "none",
@@ -30,7 +31,7 @@ const labelStyle = {
   flexDirection: "column" as const,
   gap: 6,
   fontSize: 11,
-  color: "#8aa0c8",
+  color: LT.muted,
   fontWeight: 800,
 };
 
@@ -94,7 +95,7 @@ export default function SimulatedShipModal({ open, position, defaultName, onCanc
         alignItems: "center",
         justifyContent: "center",
         padding: 20,
-        background: "rgba(3,7,18,.68)",
+        background: "rgba(15,23,42,.42)",
         backdropFilter: "blur(6px)",
       }}
     >
@@ -102,19 +103,19 @@ export default function SimulatedShipModal({ open, position, defaultName, onCanc
         onSubmit={submit}
         style={{
           width: "min(440px, 100%)",
-          borderRadius: 12,
-          border: "1px solid rgba(120,160,255,.18)",
-          background: "rgba(11,18,34,.98)",
-          boxShadow: "0 24px 70px rgba(0,0,0,.5)",
-          color: "#e7ecf5",
+          borderRadius: 16,
+          border: LT.border,
+          background: LT.panelSolid,
+          boxShadow: "0 24px 70px rgba(15,23,42,.28)",
+          color: LT.ink,
           padding: 18,
         }}
       >
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 12, color: "#38bdf8", fontWeight: 900, letterSpacing: ".08em" }}>SIMULATION</div>
-            <h2 style={{ margin: "6px 0 0", fontSize: 20, lineHeight: 1.2 }}>가상 선박 생성</h2>
-            <p style={{ margin: "8px 0 0", fontSize: 12, color: "#8aa0c8", lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, color: LT.blue, fontWeight: 800, letterSpacing: ".08em" }}>SIMULATION</div>
+            <h2 style={{ margin: "6px 0 0", fontSize: 20, lineHeight: 1.2, fontWeight: 800, color: LT.ink }}>가상 선박 생성</h2>
+            <p style={{ margin: "8px 0 0", fontSize: 12, color: LT.muted, lineHeight: 1.5 }}>
               우클릭한 위치에 운영자 검토용 입항 시나리오 선박을 추가합니다.
             </p>
           </div>
@@ -126,9 +127,9 @@ export default function SimulatedShipModal({ open, position, defaultName, onCanc
               width: 32,
               height: 32,
               borderRadius: 8,
-              border: "1px solid rgba(255,255,255,.08)",
-              background: "rgba(255,255,255,.04)",
-              color: "#cbd5e1",
+              border: LT.border,
+              background: LT.tile,
+              color: LT.inkSoft,
               cursor: "pointer",
               fontSize: 18,
               lineHeight: 1,
@@ -138,7 +139,7 @@ export default function SimulatedShipModal({ open, position, defaultName, onCanc
           </button>
         </div>
 
-        <div style={{ marginTop: 14, padding: "9px 10px", borderRadius: 8, background: "rgba(56,189,248,.08)", color: "#bae6fd", fontSize: 11.5 }}>
+        <div style={{ marginTop: 14, padding: "9px 10px", borderRadius: 10, background: LT.blueSoft, color: "#1e40af", fontSize: 11.5, fontWeight: 600 }}>
           위치: {position.lat.toFixed(5)}, {position.lng.toFixed(5)}
         </div>
 
@@ -177,7 +178,7 @@ export default function SimulatedShipModal({ open, position, defaultName, onCanc
           </label>
         </div>
 
-        {error && <div style={{ marginTop: 12, color: "#fecaca", fontSize: 12, fontWeight: 700 }}>{error}</div>}
+        {error && <div style={{ marginTop: 12, color: LT.red, fontSize: 12, fontWeight: 700 }}>{error}</div>}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
           <button
@@ -186,10 +187,10 @@ export default function SimulatedShipModal({ open, position, defaultName, onCanc
             style={{
               height: 38,
               padding: "0 14px",
-              borderRadius: 8,
-              border: "1px solid rgba(148,163,184,.22)",
-              background: "transparent",
-              color: "#cbd5e1",
+              borderRadius: 10,
+              border: LT.border,
+              background: LT.tile,
+              color: LT.inkSoft,
               fontWeight: 800,
               cursor: "pointer",
             }}
@@ -201,12 +202,13 @@ export default function SimulatedShipModal({ open, position, defaultName, onCanc
             style={{
               height: 38,
               padding: "0 16px",
-              borderRadius: 8,
+              borderRadius: 10,
               border: "none",
-              background: "#38bdf8",
-              color: "#082f49",
-              fontWeight: 900,
+              background: LT.blue,
+              color: "#fff",
+              fontWeight: 800,
               cursor: "pointer",
+              boxShadow: "0 6px 16px rgba(37,99,235,.28)",
             }}
           >
             생성

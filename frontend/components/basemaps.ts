@@ -83,5 +83,6 @@ export function initialBasemapId(): string {
   }
   const envLayer = process.env.NEXT_PUBLIC_VWORLD_LAYER?.toLowerCase();
   if (envLayer && BASEMAPS.some((b) => b.id === envLayer && b.url)) return envLayer;
-  return BASEMAPS.find((b) => b.url)?.id ?? BASEMAPS[0].id;
+  // 라이트 테마 대시보드 기본 배경: 밝은 지도(CARTO light).
+  return BASEMAPS.find((b) => b.id === "light" && b.url)?.id ?? BASEMAPS.find((b) => b.url)?.id ?? BASEMAPS[0].id;
 }

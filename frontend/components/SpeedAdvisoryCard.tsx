@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import type { EnergyDecision, EnergyDecisionApiResult } from "@/frontend/types/energy-decision";
+import { LT } from "./theme";
 
-const muted = "#8aa0c8";
-const panel = "rgba(11,18,34,0.82)";
-const border = "1px solid rgba(120,160,255,0.14)";
+const muted = LT.muted;
+const panel = LT.panel;
+const border = LT.border;
 
 interface Props {
   level: number;
@@ -73,7 +74,8 @@ export default function SpeedAdvisoryCard({ level }: Props) {
         backdropFilter: "blur(14px)",
         border,
         borderRadius: 14,
-        color: "#e7ecf5",
+        boxShadow: LT.shadow,
+        color: LT.ink,
         fontFamily: "Pretendard, system-ui, sans-serif",
       }}
     >
@@ -83,12 +85,12 @@ export default function SpeedAdvisoryCard({ level }: Props) {
       </div>
 
       <div style={{ fontSize: 10.5, color: muted, fontWeight: 600, marginBottom: 10 }}>
-        현재 혼잡도 <b style={{ color: pct >= 60 ? "#fbbf24" : "#34d399" }}>{pct}%</b>
+        현재 혼잡도 <b style={{ color: pct >= 60 ? LT.amber : LT.green }}>{pct}%</b>
         {loading ? (
           " · 계산 중"
         ) : hasSavings ? (
           <>
-            {" "}· 권고 <b style={{ color: "#fbbf24" }}>{summary?.recommendedCount ?? 0}척</b>
+            {" "}· 권고 <b style={{ color: LT.amber }}>{summary?.recommendedCount ?? 0}척</b>
           </>
         ) : (
           " · JIT 감속 권고 없음"
@@ -135,13 +137,13 @@ function SummaryStats({
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 12 }}>
       {[
-        { label: "대기 감소", value: String(waitMinutes), unit: "분", accent: "#fbbf24" },
-        { label: "연료 절감", value: fuel.value, unit: fuel.unit, accent: "#38bdf8" },
-        { label: "CO2 감축", value: co2.value, unit: co2.unit, accent: "#34d399" },
+        { label: "대기 감소", value: String(waitMinutes), unit: "분", accent: LT.amber },
+        { label: "연료 절감", value: fuel.value, unit: fuel.unit, accent: LT.sky },
+        { label: "CO2 감축", value: co2.value, unit: co2.unit, accent: LT.green },
       ].map((s) => (
         <div
           key={s.label}
-          style={{ background: "rgba(255,255,255,.04)", borderRadius: 10, padding: "8px 6px", textAlign: "center" }}
+          style={{ background: LT.tile, borderRadius: 10, padding: "8px 6px", textAlign: "center" }}
         >
           <div style={{ fontSize: 17, fontWeight: 800, color: s.accent, lineHeight: 1.1 }}>
             {s.value}
@@ -185,7 +187,7 @@ function EmptyState({
 
   return (
     <div style={{ fontSize: 11.5, color: muted, padding: "4px 0 2px", lineHeight: 1.5 }}>
-      <div style={{ color: "#e7ecf5", fontWeight: 800, marginBottom: 6 }}>
+      <div style={{ color: LT.ink, fontWeight: 800, marginBottom: 6 }}>
         {emptyReason?.title ?? "현재 JIT 감속 권고 대상 선박이 없습니다."}
       </div>
       <div style={{ marginBottom: 8 }}>
@@ -203,7 +205,7 @@ function EmptyState({
       )}
 
       {freshness?.isStale && (
-        <div style={{ padding: "7px 8px", background: "rgba(251,191,36,.08)", borderRadius: 8, color: "#fbbf24" }}>
+        <div style={{ padding: "7px 8px", background: "rgba(232,149,43,.10)", borderRadius: 8, color: LT.amber }}>
           혼잡도 예측 데이터가 최신 선박 ETA 범위를 벗어나 currentLevel fallback 기준으로 계산 중입니다.
           Port-MIS 데이터를 최신화하면 ETA 시간대 기반 권고가 활성화될 수 있습니다.
         </div>
@@ -228,9 +230,9 @@ function EmptyState({
 
 function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ background: "rgba(255,255,255,.04)", borderRadius: 8, padding: "5px 7px" }}>
+    <div style={{ background: LT.tile, borderRadius: 8, padding: "5px 7px" }}>
       <div style={{ fontSize: 9.5, color: muted, fontWeight: 700 }}>{label}</div>
-      <div style={{ fontSize: 12, color: "#e7ecf5", fontWeight: 800 }}>{value}</div>
+      <div style={{ fontSize: 12, color: LT.ink, fontWeight: 800 }}>{value}</div>
     </div>
   );
 }
@@ -245,7 +247,7 @@ function DecisionRow({ decision }: { decision: EnergyDecision }) {
         alignItems: "center",
         gap: 8,
         padding: "6px 9px",
-        background: "rgba(255,255,255,.03)",
+        background: LT.tile,
         borderRadius: 8,
       }}
     >
@@ -254,7 +256,7 @@ function DecisionRow({ decision }: { decision: EnergyDecision }) {
         style={{
           fontSize: 11.5,
           fontWeight: 700,
-          color: "#c7d3ea",
+          color: LT.inkSoft,
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
@@ -265,9 +267,9 @@ function DecisionRow({ decision }: { decision: EnergyDecision }) {
       </span>
       <span style={{ fontSize: 11, color: muted, whiteSpace: "nowrap" }}>
         {decision.currentSpeedKn.toFixed(0)}→
-        <b style={{ color: "#38bdf8" }}>{decision.recommendedSpeedKn.toFixed(1)}</b>kn
+        <b style={{ color: LT.sky }}>{decision.recommendedSpeedKn.toFixed(1)}</b>kn
       </span>
-      <span style={{ fontSize: 11, fontWeight: 800, color: "#34d399", whiteSpace: "nowrap" }}>
+      <span style={{ fontSize: 11, fontWeight: 800, color: LT.green, whiteSpace: "nowrap" }}>
         {fuel.value}
         {fuel.unit}
       </span>
