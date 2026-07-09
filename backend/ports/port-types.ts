@@ -90,6 +90,31 @@ export interface PortDuePolicy {
   gradeMultiplier: { A: number; B: number; C: number; D: number; E: number };
 }
 
+// 총톤수(GT) 구간별 정액 요금 — 예선료처럼 "이 GT 이하까지 이 요금" 형태의 계단식 요율에 쓴다.
+// 배열은 maxGrossTonnage 오름차순, 마지막 항목의 maxGrossTonnage=Infinity로 상한을 연다.
+export interface GrossTonnageFeeTier {
+  maxGrossTonnage: number;
+  feeUsd: number;
+}
+
+// 선박 규모(소/중/대) 3단계 대표값 — fuel.ts SizeTier(<10,000 / <50,000 / 이상)와 동일 경계를 쓴다.
+export interface SizeTierValue {
+  small: number;
+  medium: number;
+  large: number;
+}
+
+// 입항 1건의 부가 비용 정책 — 예선료·대기(체선)비용·선원 인건비·냉동컨테이너 전력비.
+// 연료비·탄소비용(입항료)은 각각 fuel.ts/carbon-port-due.ts가 별도로 계산하므로 여기 포함하지 않는다.
+export interface PortCallCostPolicy {
+  tugFeeTiers: GrossTonnageFeeTier[]; // GT 구간별 예선료(입출항 왕복, 정액)
+  crewDailyWageUsd: number; // 선원 1인당 1일 인건비(USD, 사관·부원 혼합 대표단가)
+  defaultCrewBySizeTier: SizeTierValue; // 승무원수(crewCount) 미상일 때 대체할 규모별 인원수
+  waitingCostUsdPerHourBySizeTier: SizeTierValue; // 대기(체선) 시간당 기회비용(용선료 상당 근사)
+  reeferTeuPerGrossTonnage: number; // GT → 냉동컨테이너(TEU) 근사 계수. 냉동선(reefer)에만 적용.
+  reeferPowerUsdPerTeuPerHour: number; // 냉동 플러그 1TEU당 시간당 전력비용(USD)
+}
+
 // 동시 재항 척수 용량 — 2019~2024 부산항만공사 입출항 집계 27만건에서 오프라인 산출한
 // 실측 상수. "동시 재항" = 부산항계 안(접안+묘박+대기 전체). 혼잡도 정규화의 분모로 쓴다.
 // (P50=평시 중앙, P99=현실적 최대. 실시간 AIS/MIS도 같은 경계로 세야 분모/분자가 맞는다.)
@@ -210,6 +235,7 @@ export interface PortConfig {
   approachRoutes: ApproachRoute[]; // /simulation 사전 정의 접근 경로 후보
   portCallCapacity: PortCallCapacity; // 동시 재항 용량·대기 보정(입출항 집계 실측)
   portDue: PortDuePolicy; // 환경차등 입항료 정책(탄소부담금·CII 등급 차등)
+  portCallCost: PortCallCostPolicy; // 입항 부가비용 정책(예선료·대기비용·인건비·냉동컨테이너 전력비)
 }
 
 export interface CongestionPoint {

@@ -181,4 +181,26 @@ export const BUSAN_PORT: PortConfig = {
     carbonPriceUsdPerTon: 90,
     gradeMultiplier: { A: -0.15, B: -0.075, C: 0, D: 0.075, E: 0.15 },
   },
+
+  // 입항 부가비용 정책(예시값 — 실 요율표·용선시장 시세로 교체 가능. 업계 통상범위 기반 근사).
+  //  - tugFeeTiers: 예선 2척 왕복(입항+출항) 정액 근사. GT가 클수록 필요 예선 대수·마력 증가.
+  //  - crewDailyWageUsd: 사관·부원 혼합 대표 1인당 1일 인건비(급여+식비 등 근사).
+  //  - defaultCrewBySizeTier: Port-MIS crewCount 미상일 때 쓸 규모별 표준 승무원수.
+  //  - waitingCostUsdPerHourBySizeTier: 대기(체선)로 묶이는 시간의 기회비용 — 용선료 상당 근사.
+  //  - reeferTeuPerGrossTonnage / reeferPowerUsdPerTeuPerHour: 냉동선(reefer)에만 적용.
+  //    8만 GT급 컨테이너선이 냉동 플러그 ~600TEU를 갖는 경우를 기준으로 계수를 역산(0.0075).
+  //    전력비는 플러그당 5~7kW × 산업용 전력단가(~$0.06/kWh) 근사.
+  portCallCost: {
+    tugFeeTiers: [
+      { maxGrossTonnage: 10_000, feeUsd: 1_200 },
+      { maxGrossTonnage: 30_000, feeUsd: 2_200 },
+      { maxGrossTonnage: 80_000, feeUsd: 3_800 },
+      { maxGrossTonnage: Infinity, feeUsd: 5_500 },
+    ],
+    crewDailyWageUsd: 220,
+    defaultCrewBySizeTier: { small: 15, medium: 20, large: 24 },
+    waitingCostUsdPerHourBySizeTier: { small: 300, medium: 800, large: 1_800 },
+    reeferTeuPerGrossTonnage: 0.0075,
+    reeferPowerUsdPerTeuPerHour: 0.35,
+  },
 };
