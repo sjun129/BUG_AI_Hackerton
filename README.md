@@ -40,6 +40,65 @@
 
 <br>
 
+<br>
+
+## 아키텍처
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#f5f5f5',
+  'primaryTextColor': '#1a1a1a',
+  'primaryBorderColor': '#8a8a8a',
+  'lineColor': '#8a8a8a',
+  'secondaryColor': '#e5e5e5',
+  'tertiaryColor': '#ffffff',
+  'clusterBkg': '#fafafa',
+  'clusterBorder': '#bdbdbd',
+  'fontFamily': 'ui-sans-serif, system-ui'
+}}}%%
+flowchart TB
+    subgraph Client["🖥️ Frontend"]
+        UI["frontend/components<br/>지도 · 차트 · 어드바이저 패널"]
+        Pages["app/*<br/>dashboard · vessel · simulation · congestion"]
+    end
+
+    subgraph API["🌐 API Layer"]
+        Route["app/api/*/route.ts<br/>HTTP 경계"]
+    end
+
+    subgraph Backend["⚙️ Backend (순수 로직)"]
+        Prediction["backend/prediction<br/>ETA · 혼잡도 (결정론적 계산)"]
+        Advisor["backend/advisor<br/>LLM 프롬프트 생성 · 응답 안전 파싱"]
+        AIS["backend/ais<br/>AIS 데이터 소스"]
+        Ports["backend/ports/seed-port.ts<br/>항만 좌표 · 선석 · 임계값 (★단일 데이터 소스)"]
+    end
+
+    subgraph External["☁️ External"]
+        Supabase[("Supabase")]
+        OpenAI["OpenAI API<br/>(Vercel AI SDK)"]
+    end
+
+    Pages --> UI
+    UI --> Route
+    Route --> Prediction
+    Route --> Advisor
+    Prediction --> AIS
+    Prediction --> Ports
+    Advisor --> Ports
+    Advisor --> OpenAI
+    Route --> Supabase
+
+    classDef default fill:#f5f5f5,stroke:#8a8a8a,stroke-width:1px,color:#1a1a1a;
+    classDef ext fill:#e5e5e5,stroke:#8a8a8a,stroke-width:1px,color:#1a1a1a,stroke-dasharray: 3 3;
+    class Supabase,OpenAI ext;
+```
+
+- **HTTP 경계(app/api)와 순수 로직(backend)을 분리**해, 예측·권고 로직을 API 구현과 독립적으로 테스트할 수 있게 했습니다.
+- **`seed-port.ts`가 유일한 항만 데이터 소스**로, 예측·어드바이저 양쪽이 같은 데이터를 참조합니다 — 다른 항만 적용 시 이 파일만 교체하면 됩니다.
+- LLM(OpenAI)은 **어드바이저 영역에만 관여**하며, 그 결과는 그대로 신뢰하지 않고 안전 파싱을 거쳐 클라이언트로 전달됩니다.
+
+<br>
+
 ## 기술 스택
 
 ![Next.js](https://img.shields.io/badge/Next.js-000000?style=flat&logo=next.js&logoColor=white)
