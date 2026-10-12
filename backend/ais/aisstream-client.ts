@@ -48,7 +48,15 @@ export function subscribeAisStream(options: SubscribeOptions): () => void {
     ws.on("message", (raw) => {
       lastMessageAt = Date.now();
       try {
-        options.onMessage(JSON.parse(raw.toString()) as AisEnvelope);
+        const msg = JSON.parse(raw.toString()) as Partial<AisEnvelope>;
+        // 연결 직후 오는 구독 확인 메시지는 MetaData가 없는 정상 제어 메시지라 조용히 넘긴다.
+        if ((msg as { MessageType?: string }).MessageType === "SubscriptionConfirmation") return;
+        // 그 밖에 MetaData 없는 메시지(예: {"error": "..."})는 내용을 그대로 드러내고 건너뛴다.
+        if (!msg.MetaData || !msg.Message) {
+          options.onStatus?.("error", `aisstream 비정상 메시지: ${raw.toString().slice(0, 200)}`);
+          return;
+        }
+        options.onMessage(msg as AisEnvelope);
       } catch (err) {
         options.onStatus?.("error", err);
       }
