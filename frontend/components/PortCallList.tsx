@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { BerthType, PortCall } from "@/backend/ports/port-types";
+import type { BerthType, PortCall } from "@/frontend/types/domain";
 
 const BERTH_BADGE: Record<BerthType, { bg: string; color: string; label: string }> = {
   접안: { bg: "#eafaf0", color: "#16a34a", label: "접안" },

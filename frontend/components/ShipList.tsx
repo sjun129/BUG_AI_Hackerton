@@ -1,6 +1,6 @@
 "use client";
 
-import type { Ship } from "@/backend/ports/port-types";
+import type { Ship } from "@/frontend/types/domain";
 
 const STATUS_LABEL: Record<Ship["status"], string> = {
   underway: "항해 중",

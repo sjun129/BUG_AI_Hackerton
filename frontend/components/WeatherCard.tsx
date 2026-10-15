@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { WeatherForecast, WeatherPoint } from "@/backend/weather/types";
+import type { WeatherForecast, WeatherPoint } from "@/frontend/types/domain";
 
 type Kind = "clear" | "partly" | "cloudy" | "rain" | "snow" | "shower";
 

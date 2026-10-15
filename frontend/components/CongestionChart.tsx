@@ -1,7 +1,7 @@
 "use client";
 
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { CongestionForecast } from "@/backend/ports/port-types";
+import type { CongestionForecast } from "@/frontend/types/domain";
 
 interface CongestionChartProps {
   forecast: CongestionForecast;

@@ -1,0 +1,73 @@
+import { fetchShips } from "@/backend/ais/ship-source";
+import { resolveRegionalCongestion } from "@/backend/congestion/regional-congestion";
+import { computeCongestionForecast } from "@/backend/prediction/congestion";
+import { computeEnergyDecisions } from "@/backend/prediction/energy-decision";
+import { computeSimulationEnergyDecisions } from "@/backend/prediction/simulation-energy";
+import { fetchPortCongestion } from "@/backend/portmis/congestion-source";
+import { fetchPortCalls } from "@/backend/portmis/portcall-source";
+import { BUSAN_PORT } from "@/backend/ports/seed-port";
+
+export interface SimulationEnergyDecisionRequest {
+  simulatedShips?: unknown;
+  congestionMode?: unknown;
+}
+
+export async function getLiveEnergyDecisions() {
+  const [ships, portCalls, portMisCongestion] = await Promise.all([
+    fetchShips(),
+    fetchPortCalls(),
+    fetchPortCongestion(),
+  ]);
+
+  const congestion = portMisCongestion ?? computeCongestionForecast(ships, BUSAN_PORT);
+  const result = computeEnergyDecisions({
+    ships,
+    congestion,
+    portCalls,
+    portConfig: BUSAN_PORT,
+  });
+
+  console.info("[energy-decisions]", {
+    candidateCount: result.summary.candidateCount,
+    recommendedCount: result.summary.recommendedCount,
+    etaForecastMatchedCount: result.summary.etaForecastMatchedCount,
+    currentLevelFallbackCount: result.summary.currentLevelFallbackCount,
+    isForecastStale: result.forecastFreshness.isStale,
+  });
+
+  return {
+    ...result,
+    isFallback: !portMisCongestion || result.isFallback,
+  };
+}
+
+export async function getSimulationEnergyDecisions(input: SimulationEnergyDecisionRequest) {
+  const [portCalls, portMisCongestion, regionalCongestion] = await Promise.all([
+    fetchPortCalls(),
+    fetchPortCongestion(),
+    resolveRegionalCongestion(BUSAN_PORT),
+  ]);
+
+  const congestion = portMisCongestion ?? computeCongestionForecast([], BUSAN_PORT);
+  const result = computeSimulationEnergyDecisions({
+    simulatedShips: input.simulatedShips ?? [],
+    congestionMode: input.congestionMode,
+    congestion,
+    portCalls,
+    regionalCongestion,
+    portConfig: BUSAN_PORT,
+  });
+
+  console.info("[energy-decisions:simulation]", {
+    candidateCount: result.summary.candidateCount,
+    recommendedCount: result.summary.recommendedCount,
+    acceptedCount: result.validation.acceptedCount,
+    rejectedCount: result.validation.rejectedCount,
+    isForecastStale: result.forecastFreshness.isStale,
+  });
+
+  return {
+    ...result,
+    isFallback: !portMisCongestion || result.isFallback,
+  };
+}
