@@ -18,10 +18,15 @@ export interface Basemap {
   separator?: boolean; // 드롭다운에서 위쪽에 구분선을 그어 그룹을 나눌 항목
 }
 
-const CARTO_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
+const VWORLD_ATTR = '&copy; <a href="https://www.vworld.kr">VWorld</a> · 국토교통부';
+const OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 
 // 레퍼런스와 같은 큐레이션 목록: 기본 / 라이트 / 다크 / 위성 / ENC 전자해도.
 // VWorld 키가 있으면 기본·위성은 국토부 타일로 승격(한국 연안 품질↑, 위성엔 라벨 오버레이).
+// 라이트·다크는 원래 CARTO 타일이었으나 CARTO가 키 없는 접근을 막아 "API KEY REQUIRED" 안내
+// 이미지만 내려주므로(실측 확인), VWorld white/midnight 로 대체한다. 키가 없으면 라이트는 OSM,
+// 다크는 비활성(null)이 된다.
 function buildBasemaps(): Basemap[] {
   const vworld = (layer: string, ext = "png") => `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_KEY}/${layer}/{z}/{y}/{x}.${ext}`;
 
@@ -39,15 +44,16 @@ function buildBasemaps(): Basemap[] {
       id: "light",
       label: "라이트",
       icon: "☀️",
-      url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-      attribution: CARTO_ATTR,
+      url: VWORLD_KEY ? vworld("white") : OSM_URL,
+      attribution: VWORLD_KEY ? VWORLD_ATTR : OSM_ATTR,
     },
     {
       id: "dark",
       label: "다크",
       icon: "🌙",
-      url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-      attribution: CARTO_ATTR,
+      url: VWORLD_KEY ? vworld("midnight") : null,
+      attribution: VWORLD_ATTR,
+      note: "NEXT_PUBLIC_VWORLD_KEY 설정 필요",
     },
     {
       id: "satellite",
