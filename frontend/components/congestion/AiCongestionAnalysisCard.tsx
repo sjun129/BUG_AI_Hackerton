@@ -4,8 +4,8 @@ import { LT } from "@/frontend/components/theme";
 import { useCongestionAnalysis } from "@/frontend/hooks/useCongestionAnalysis";
 import type { CongestionAnalysisRiskLevel } from "@/frontend/types/congestion-analysis";
 
-const border = LT.border;
 const muted = LT.muted;
+const border = LT.border;
 
 function riskTone(risk: CongestionAnalysisRiskLevel): { label: string; color: string; bg: string } {
   if (risk === "high") return { label: "높음", color: LT.red, bg: "rgba(239,68,68,.10)" };
@@ -63,11 +63,9 @@ export default function AiCongestionAnalysisCard() {
       style={{
         ...{
           background: LT.panelSolid,
-          border,
-          borderRadius: 16,
-          padding: "18px 20px",
+          borderRadius: 18,
+          padding: "20px 22px",
           boxShadow: LT.shadow,
-          marginBottom: 18,
         },
       }}
     >

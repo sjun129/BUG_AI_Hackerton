@@ -35,10 +35,8 @@ function buildBasemaps(): Basemap[] {
       id: "base",
       label: "기본",
       icon: "🗺️",
-      url: VWORLD_KEY ? vworld("Base") : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      attribution: VWORLD_KEY
-        ? '&copy; <a href="https://www.vworld.kr">VWorld</a> · 국토교통부'
-        : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      url: VWORLD_KEY ? vworld("Base") : OSM_URL,
+      attribution: VWORLD_KEY ? VWORLD_ATTR : OSM_ATTR,
     },
     {
       id: "light",
@@ -62,7 +60,7 @@ function buildBasemaps(): Basemap[] {
       url: VWORLD_KEY
         ? vworld("Satellite", "jpeg")
         : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      attribution: VWORLD_KEY ? '&copy; <a href="https://www.vworld.kr">VWorld</a> · 국토교통부' : "Tiles &copy; Esri",
+      attribution: VWORLD_KEY ? VWORLD_ATTR : "Tiles &copy; Esri",
       hybrid: VWORLD_KEY ? vworld("Hybrid") : undefined,
     },
     {
@@ -81,14 +79,20 @@ function buildBasemaps(): Basemap[] {
 export const BASEMAPS = buildBasemaps();
 export const BASEMAP_STORAGE = "portiq.basemap";
 
-// 초기 선택 배경 결정: (1) localStorage 저장값, (2) env의 초기 레이어 지정, (3) 첫 항목.
-export function initialBasemapId(): string {
-  if (typeof window !== "undefined") {
-    const saved = window.localStorage.getItem(BASEMAP_STORAGE);
-    if (saved && BASEMAPS.some((b) => b.id === saved && b.url)) return saved;
-  }
+// 기본 배경(서버·클라이언트 첫 렌더 공통): (1) env의 초기 레이어 지정, (2) 라이트, (3) 첫 활성 항목.
+export function defaultBasemapId(): string {
   const envLayer = process.env.NEXT_PUBLIC_VWORLD_LAYER?.toLowerCase();
   if (envLayer && BASEMAPS.some((b) => b.id === envLayer && b.url)) return envLayer;
-  // 라이트 테마 대시보드 기본 배경: 밝은 지도(CARTO light).
   return BASEMAPS.find((b) => b.id === "light" && b.url)?.id ?? BASEMAPS.find((b) => b.url)?.id ?? BASEMAPS[0].id;
+}
+
+// 사용자가 저장한 배경(없거나 비활성이면 null). localStorage를 읽으므로 마운트 후(useEffect)에만 호출한다 —
+// useState 초기값에서 읽으면 서버 렌더와 달라져 하이드레이션 오류가 난다.
+export function savedBasemapId(): string | null {
+  try {
+    const saved = window.localStorage.getItem(BASEMAP_STORAGE);
+    return saved && BASEMAPS.some((b) => b.id === saved && b.url) ? saved : null;
+  } catch {
+    return null;
+  }
 }

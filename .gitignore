@@ -14,3 +14,6 @@ next-env.d.ts
 # OS
 .DS_Store
 .vercel
+
+# Vercel에 붙여넣기용 임시 환경변수 파일(비밀 포함)
+.env.vercel

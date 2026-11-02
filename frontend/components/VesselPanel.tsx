@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { BerthType, PortCall } from "@/frontend/types/domain";
-import { RIGHT_PANEL_RIGHT, RIGHT_PANEL_WIDTH } from "./layout";
+import { CloseButton } from "./PanelControls";
 import { LT } from "./theme";
 
 // MOVIDIK 스타일 우측 선박 패널 — 검색 + 필터 탭 + 선박 목록 + 선택 선박 상세 카드.
@@ -39,9 +39,10 @@ interface VesselPanelProps {
   calls: PortCall[];
   selectedKey: string | null;
   onSelect: (key: string | null) => void;
+  onClose?: () => void;
 }
 
-export default function VesselPanel({ calls, selectedKey, onSelect }: VesselPanelProps) {
+export default function VesselPanel({ calls, selectedKey, onSelect, onClose }: VesselPanelProps) {
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<"전체" | BerthType>("전체");
 
@@ -75,19 +76,15 @@ export default function VesselPanel({ calls, selectedKey, onSelect }: VesselPane
   return (
     <div
       style={{
-        position: "absolute",
-        top: 16,
-        right: RIGHT_PANEL_RIGHT, // 우측 세로 툴바(레일) 자리를 비운다
-        bottom: 16,
-        width: RIGHT_PANEL_WIDTH,
-        maxWidth: `calc(100vw - ${RIGHT_PANEL_RIGHT + 32}px)`,
-        zIndex: 500,
+        // 위치·크기는 대시보드의 오른쪽 열이 정한다(감속 권고 카드와 위아래로 나눠 쓴다).
+        flex: 1,
+        minHeight: 0,
         display: "flex",
         flexDirection: "column",
         background: panelBg,
         backdropFilter: "blur(14px)",
         border,
-        borderRadius: 16,
+        borderRadius: 18,
         boxShadow: LT.shadow,
         color: ink,
         overflow: "hidden",
@@ -96,8 +93,10 @@ export default function VesselPanel({ calls, selectedKey, onSelect }: VesselPane
     >
       {/* 검색 + 탭 */}
       <div style={{ padding: "14px 14px 10px", borderBottom: border }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <div
           style={{
+            flex: 1,
             display: "flex",
             alignItems: "center",
             gap: 8,
@@ -122,6 +121,8 @@ export default function VesselPanel({ calls, selectedKey, onSelect }: VesselPane
               fontFamily: "inherit",
             }}
           />
+        </div>
+        {onClose && <CloseButton onClick={onClose} label="선박 목록 닫기" />}
         </div>
         <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
           {(["전체", "접안", "묘박"] as const).map((t) => {

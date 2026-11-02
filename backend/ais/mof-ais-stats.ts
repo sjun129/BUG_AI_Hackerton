@@ -91,13 +91,31 @@ function assertYmd(date: string): void {
   }
 }
 
+// 응답이 없으면 이 시간 뒤 포기한다(호출부가 catch 해 다음 후보 날짜·폴백으로 넘어간다).
+const FETCH_TIMEOUT_MS = 10_000;
+
+// 조회 날짜가 과거 연도라 같은 (날짜, 레이어, bbox) 결과는 바뀌지 않는다 — 프로세스 메모리에 캐시하고
+// 동시에 들어온 같은 요청(/api/congestion·regions·analysis)은 하나의 fetch를 공유한다. 실패는 캐시하지 않는다.
+// ponytail: 무제한 Map — 키가 하루 (후보 날짜 × 지역 bbox) 몇 개뿐이라 충분. 키가 늘면 LRU로.
+const statsCache = new Map<string, Promise<BusanShipStats>>();
+
 /**
  * 부산항 bbox 안의 해역 격자를 조회해, 지정한 날짜(ship_dt)의 시간대별 AIS 척수 합계를 반환한다.
  * key/domain 환경변수가 없으면 명확한 에러를 던진다(호출부에서 catch 해 폴백).
  */
-export async function fetchBusanShipStats(
+export function fetchBusanShipStats(date: string, options: FetchBusanShipStatsOptions = {}): Promise<BusanShipStats> {
+  const cacheKey = JSON.stringify([date, options.layer ?? MOF_AIS_LAYERS.small, options.boundingBox ?? null]);
+  const cached = statsCache.get(cacheKey);
+  if (cached) return cached;
+  const pending = fetchBusanShipStatsUncached(date, options);
+  statsCache.set(cacheKey, pending);
+  pending.catch(() => statsCache.delete(cacheKey));
+  return pending;
+}
+
+async function fetchBusanShipStatsUncached(
   date: string,
-  options: FetchBusanShipStatsOptions = {}
+  options: FetchBusanShipStatsOptions
 ): Promise<BusanShipStats> {
   assertYmd(date);
 
@@ -124,7 +142,9 @@ export async function fetchBusanShipStats(
     domain,
   });
 
-  const res = await fetch(`${WFS_ENDPOINT}?${params.toString()}`, { signal: options.signal });
+  const res = await fetch(`${WFS_ENDPOINT}?${params.toString()}`, {
+    signal: options.signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
   const text = await res.text();
 
   // 서버는 에러도 HTTP 200 + XML(ServiceException)로 돌려주므로, 본문으로 판별한다.

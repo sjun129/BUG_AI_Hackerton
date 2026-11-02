@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import dynamic from "next/dynamic";
 import type { CongestionForecast, PortCall, RegionCongestionSeries, Ship } from "@/frontend/types/domain";
 import { BUSAN_DISPLAY_PORT, congestionDisplayColor, congestionDisplayLabel } from "@/frontend/config/ports";
 import VesselPanel from "@/frontend/components/VesselPanel";
 import AdvisorPanel from "@/frontend/components/AdvisorPanel";
 import SpeedAdvisoryCard from "@/frontend/components/SpeedAdvisoryCard";
-import LeftRail from "@/frontend/components/LeftRail";
-import { BASEMAPS, BASEMAP_STORAGE, initialBasemapId, type Basemap } from "@/frontend/components/basemaps";
-import { RIGHT_PANEL_LEFT_EDGE } from "@/frontend/components/layout";
+import LeftRail, { ImgIcon, RAIL_OFFSET, RailItemView } from "@/frontend/components/LeftRail";
+import { CloseButton, GaugeIcon, LayersIcon, PanelBubble } from "@/frontend/components/PanelControls";
+import { BASEMAPS, BASEMAP_STORAGE, defaultBasemapId, savedBasemapId, type Basemap } from "@/frontend/components/basemaps";
 import { filterShipsMatchingPortMis } from "@/frontend/utils/match-position";
+import { deadReckon } from "@/frontend/utils/dead-reckoning";
 import { LT } from "@/frontend/components/theme";
 
 // Leaflet은 window에 의존하므로 서버에서 렌더링하면 안 된다.
@@ -19,6 +20,11 @@ const ShipMap = dynamic(() => import("@/frontend/components/ShipMap"), { ssr: fa
 const muted = LT.muted;
 const panel = LT.panel;
 const border = LT.border;
+
+// 오른쪽 열(선박 패널 + 감속 권고)과 왼쪽 아래 혼잡도 카드의 크기 — 하단 AI 입력창 구간 계산에 쓴다.
+const RIGHT_COLUMN_WIDTH = 380;
+const RIGHT_EDGE = 16 + RIGHT_COLUMN_WIDTH + 16;
+const PORT_CARD_WIDTH = 420;
 
 function congestionColor(level: number): string {
   return congestionDisplayColor(level);
@@ -37,105 +43,43 @@ function Metric({ label, value, unit, accent }: { label: string; value: string; 
   );
 }
 
-// "표시 항목" 카테고리 — 사이트 안에서 화면 오버레이를 켜고 끈다.
-type LayerKey = "vessels" | "congestion" | "advisory";
-const LAYER_ITEMS: { key: LayerKey; label: string; icon: string }[] = [
-  { key: "vessels", label: "선박 패널", icon: "🚢" },
-  { key: "congestion", label: "혼잡도", icon: "📊" },
-  { key: "advisory", label: "감속 권고", icon: "⚓" },
-];
-const LAYERS_STORAGE = "portiq.layers";
+// 패널 열림 상태 — X로 닫으면 버블로 접히고, 버블을 누르면 다시 열린다. 브라우저에 기억한다.
+type PanelKey = "vessels" | "congestion" | "advisory";
+const PANELS_STORAGE = "portiq.layers";
+const DEFAULT_PANELS: Record<PanelKey, boolean> = { vessels: true, congestion: true, advisory: true };
 
 // localStorage 저장 — SSR 가드를 한 곳으로 모은다.
 function saveLocal(key: string, value: string) {
   if (typeof window !== "undefined") window.localStorage.setItem(key, value);
 }
 
-function initialLayers(): Record<LayerKey, boolean> {
-  const def: Record<LayerKey, boolean> = { vessels: true, congestion: true, advisory: true };
-  if (typeof window === "undefined") return def;
+// 저장된 패널 상태. localStorage를 읽으므로 마운트 후(useEffect)에만 호출한다(하이드레이션 불일치 방지).
+function savedPanels(): Record<PanelKey, boolean> {
   try {
-    const saved = JSON.parse(window.localStorage.getItem(LAYERS_STORAGE) || "null");
-    return saved ? { ...def, ...saved } : def;
+    const saved = JSON.parse(window.localStorage.getItem(PANELS_STORAGE) || "null");
+    return saved ? { ...DEFAULT_PANELS, ...saved } : DEFAULT_PANELS;
   } catch {
-    return def;
+    return DEFAULT_PANELS;
   }
 }
 
-// 우측 레일 플라이아웃 공용 스타일
-const flyoutHeader: CSSProperties = { padding: "4px 8px 6px", fontSize: 10.5, fontWeight: 800, letterSpacing: ".08em", color: muted };
-const flyoutRow: CSSProperties = {
-  position: "relative",
-  width: "100%",
-  display: "flex",
-  alignItems: "center",
-  gap: 9,
-  padding: "8px 10px",
-  fontSize: 12.5,
-  fontWeight: 700,
-  textAlign: "left",
-  border: "none",
-  borderRadius: 8,
+// 지도 타입 선택창의 미리보기 견본과 설명
+const BASEMAP_PREVIEW: Record<string, { swatch: string; desc: string }> = {
+  base: { swatch: "#ede8df", desc: "VWorld 기본 지도" },
+  light: { swatch: "#f2f3f5", desc: "밝은 배경 · 관제용" },
+  dark: { swatch: "#1e293b", desc: "야간 관제용" },
+  satellite: { swatch: "linear-gradient(135deg,#455c40,#8c8061)", desc: "항공 사진 + 지명" },
+  enc: { swatch: "#cfe3f3", desc: "국립해양조사원 전자해도" },
 };
 
-// 하단 툴바의 아이콘 버튼 + 위로 열리는 플라이아웃 패널
-function RailButton({
-  icon,
-  label,
-  active,
-  onClick,
-  children,
-}: {
-  icon: string;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <div style={{ position: "relative" }}>
-      <button
-        type="button"
-        onClick={onClick}
-        title={label}
-        style={{
-          width: 40,
-          height: 40,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 18,
-          borderRadius: 10,
-          cursor: "pointer",
-          border: "none",
-          color: active ? "#fff" : muted,
-          background: active ? "linear-gradient(135deg,#2f6bff,#5b8cff)" : "transparent",
-        }}
-      >
-        {icon}
-      </button>
-      {active && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: 48,
-            left: "50%",
-            transform: "translateX(-50%)",
-            width: 184,
-            padding: 6,
-            background: "rgba(255,255,255,0.97)",
-            backdropFilter: "blur(14px)",
-            border,
-            borderRadius: 12,
-            boxShadow: LT.shadow,
-          }}
-        >
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
+const floating: CSSProperties = {
+  background: panel,
+  backdropFilter: "blur(14px)",
+  border,
+  borderRadius: 18,
+  boxShadow: LT.shadow,
+  color: LT.ink,
+};
 
 export default function DashboardPage() {
   const [ships, setShips] = useState<Ship[]>([]);
@@ -144,14 +88,20 @@ export default function DashboardPage() {
   const [portCalls, setPortCalls] = useState<PortCall[]>([]);
   const [selectedMmsi, setSelectedMmsi] = useState<string | null>(null);
   const [selectedVessel, setSelectedVessel] = useState<string | null>(null);
-  const [layers, setLayers] = useState<Record<LayerKey, boolean>>(initialLayers);
-  const [basemapId, setBasemapId] = useState<string>(initialBasemapId);
-  const [openMenu, setOpenMenu] = useState<null | "map" | "layers">(null);
+  const [panels, setPanels] = useState<Record<PanelKey, boolean>>(DEFAULT_PANELS);
+  const [basemapId, setBasemapId] = useState<string>(defaultBasemapId);
+  const [mapMenuOpen, setMapMenuOpen] = useState(false);
+  // 첫 렌더는 서버와 같은 기본값으로 하고, 저장된 사용자 설정은 마운트 후 복원한다.
+  useEffect(() => {
+    setPanels(savedPanels());
+    const saved = savedBasemapId();
+    if (saved) setBasemapId(saved);
+  }, []);
 
-  function toggleLayer(k: LayerKey) {
-    setLayers((prev) => {
-      const next = { ...prev, [k]: !prev[k] };
-      saveLocal(LAYERS_STORAGE, JSON.stringify(next));
+  function setPanel(k: PanelKey, open: boolean) {
+    setPanels((prev) => {
+      const next = { ...prev, [k]: open };
+      saveLocal(PANELS_STORAGE, JSON.stringify(next));
       return next;
     });
   }
@@ -159,26 +109,24 @@ export default function DashboardPage() {
   function selectBasemap(b: Basemap) {
     if (!b.url) return; // 비활성(설정 필요) 항목은 무시
     setBasemapId(b.id);
-    setOpenMenu(null);
+    setMapMenuOpen(false);
     saveLocal(BASEMAP_STORAGE, b.id);
   }
 
-  const currentBasemap = BASEMAPS.find((b) => b.id === basemapId) ?? BASEMAPS[0];
-
   useEffect(() => {
     let active = true;
-    async function load() {
-      const [s, cg, pc, rg] = await Promise.all([
-        fetch("/api/ships").then((r) => r.json()),
-        fetch("/api/congestion").then((r) => r.json()),
-        fetch("/api/port-calls").then((r) => r.json()),
-        fetch("/api/congestion/regions").then((r) => r.json()),
-      ]);
-      if (!active) return;
-      setShips(Array.isArray(s) ? s : []);
-      setCongestion(cg && cg.forecast ? cg : null);
-      setPortCalls(Array.isArray(pc) ? pc : []);
-      setRegions(Array.isArray(rg) ? rg : []);
+    // 각 API를 도착하는 대로 반영한다 — 느린 혼잡도 API가 선박·Port-MIS 표시를 막지 않도록.
+    // 실패한 요청은 이전 값을 유지한다.
+    function load() {
+      const get = (url: string, apply: (data: unknown) => void) =>
+        fetch(url)
+          .then((r) => r.json())
+          .then((data) => active && apply(data))
+          .catch(() => {});
+      get("/api/ships", (s) => setShips(Array.isArray(s) ? s : []));
+      get("/api/port-calls", (pc) => setPortCalls(Array.isArray(pc) ? pc : []));
+      get("/api/congestion", (cg) => setCongestion(cg && (cg as CongestionForecast).forecast ? (cg as CongestionForecast) : null));
+      get("/api/congestion/regions", (rg) => setRegions(Array.isArray(rg) ? rg : []));
     }
     load();
     const timer = setInterval(load, 30_000);
@@ -204,7 +152,21 @@ export default function DashboardPage() {
 
   // Port-MIS(공식 정박선)와 호출부호·선박명 유사도로 매칭되는 AIS 선박만 지도에 표시한다.
   // → 오래된/무관한 유령 위치를 걸러내고 공식 기록에 있는 배의 위치만 남긴다.
-  const shownShips = useMemo(() => filterShipsMatchingPortMis(ships, portCalls), [ships, portCalls]);
+  const matchedShips = useMemo(() => filterShipsMatchingPortMis(ships, portCalls), [ships, portCalls]);
+
+  // AIS 스냅샷이 실시간이 아니므로, 항해 중인 배를 페이지를 연 뒤 경과 시간만큼 침로·속력대로 옮겨 보여준다.
+  // 30초마다 선박을 다시 받아도 기준은 페이지 진입 시각이라 위치가 되돌아가지 않는다.
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    const start = Date.now();
+    const timer = setInterval(() => setElapsedMs(Date.now() - start), 3_000);
+    return () => clearInterval(timer);
+  }, []);
+  const shownShips = useMemo(() => matchedShips.map((s) => deadReckon(s, elapsedMs)), [matchedShips, elapsedMs]);
+
+  // 버블 배지: 가장 혼잡한 항만
+  const busiest = regions.reduce<RegionCongestionSeries | null>((m, r) => (!m || r.currentLevel > m.currentLevel ? r : m), null);
+  const showPortCard = panels.congestion && regions.length > 0;
 
   return (
     <div style={{ position: "fixed", inset: 0, background: LT.pageBg, overflow: "hidden", fontFamily: "Pretendard, system-ui, sans-serif" }}>
@@ -213,39 +175,23 @@ export default function DashboardPage() {
         <ShipMap ships={shownShips} selectedMmsi={selectedMmsi} onSelect={setSelectedMmsi} regions={regions} basemapId={basemapId} />
       </div>
 
-      {/* 좌측 아이콘 레일 */}
-      <LeftRail active="/dashboard" />
+      {/* 왼쪽 메뉴 — 맨 아래 '지도 타입' 버튼 */}
+      <LeftRail
+        active="/dashboard"
+        bottom={<RailItemView icon={LayersIcon} label="지도 타입" on={mapMenuOpen} onClick={() => setMapMenuOpen((v) => !v)} />}
+      />
 
-      {/* 하단 중앙 가로 툴바 — 지도 타입 / 표시 항목 (위로 펼침) */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 16,
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 600,
-          display: "flex",
-          flexDirection: "row",
-          gap: 6,
-          padding: "6px 8px",
-          background: panel,
-          backdropFilter: "blur(14px)",
-          border,
-          borderRadius: 14,
-          boxShadow: LT.shadow,
-        }}
-      >
-        {/* 지도 타입 */}
-        <RailButton
-          icon={currentBasemap.icon}
-          label="지도 타입"
-          active={openMenu === "map"}
-          onClick={() => setOpenMenu((v) => (v === "map" ? null : "map"))}
-        >
-          <div style={flyoutHeader}>지도 타입</div>
+      {/* 지도 타입 선택창 — 메뉴 오른쪽 아래에 열린다 */}
+      {mapMenuOpen && (
+        <div style={{ ...floating, position: "absolute", left: RAIL_OFFSET - 4, bottom: 16, zIndex: 800, width: 300, padding: "14px 12px", background: "#fff" }}>
+          <div style={{ padding: "0 6px 8px" }}>
+            <div style={{ fontSize: 15, fontWeight: 800 }}>지도 타입</div>
+            <div style={{ fontSize: 12, color: muted }}>배경 지도를 선택하세요</div>
+          </div>
           {BASEMAPS.map((b) => {
-            const on = b.id === currentBasemap.id;
+            const on = b.id === basemapId;
             const disabled = !b.url;
+            const preview = BASEMAP_PREVIEW[b.id];
             return (
               <button
                 key={b.id}
@@ -254,52 +200,47 @@ export default function DashboardPage() {
                 disabled={disabled}
                 title={disabled ? b.note : `배경: ${b.label}`}
                 style={{
-                  ...flyoutRow,
-                  color: disabled ? "#94a3b8" : on ? LT.blue : LT.inkSoft,
-                  background: on ? LT.blueSoft : "transparent",
-                  cursor: disabled ? "not-allowed" : "pointer",
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: 8,
                   marginTop: b.separator ? 6 : 0,
                   borderTop: b.separator ? `1px solid ${LT.borderColor}` : "none",
-                  paddingTop: b.separator ? 12 : 8,
+                  border: "none",
+                  borderRadius: 12,
+                  background: on ? LT.blueSoft : "transparent",
+                  opacity: disabled ? 0.45 : 1,
+                  cursor: disabled ? "not-allowed" : "pointer",
+                  textAlign: "left",
+                  fontFamily: "inherit",
                 }}
               >
-                <span style={{ fontSize: 14, width: 16, textAlign: "center", opacity: disabled ? 0.5 : 1 }}>{b.icon}</span>
-                <span style={{ flex: 1 }}>{b.label}</span>
-                {on && <span style={{ position: "absolute", right: 4, top: 8, bottom: 8, width: 3, borderRadius: 2, background: LT.blue }} />}
+                <span
+                  style={{
+                    width: 52,
+                    height: 38,
+                    flex: "none",
+                    borderRadius: 8,
+                    background: preview?.swatch ?? LT.tile,
+                    border: on ? `2px solid ${LT.blue}` : `1px solid ${LT.borderColor}`,
+                  }}
+                />
+                <span style={{ flex: 1 }}>
+                  <span style={{ display: "block", fontSize: 14, fontWeight: 800, color: on ? LT.blue : LT.ink }}>{b.label}</span>
+                  <span style={{ display: "block", fontSize: 11, color: muted }}>{preview?.desc}{disabled ? " · 설정 필요" : ""}</span>
+                </span>
+                {on && <span style={{ color: LT.blue, fontWeight: 900 }}>✓</span>}
               </button>
             );
           })}
-        </RailButton>
+        </div>
+      )}
 
-        {/* 표시 항목 */}
-        <RailButton
-          icon="🧭"
-          label="표시 항목"
-          active={openMenu === "layers"}
-          onClick={() => setOpenMenu((v) => (v === "layers" ? null : "layers"))}
-        >
-          <div style={flyoutHeader}>표시 항목</div>
-          {LAYER_ITEMS.map((item) => {
-            const on = layers[item.key];
-            return (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => toggleLayer(item.key)}
-                style={{ ...flyoutRow, color: on ? LT.blue : LT.muted, background: on ? LT.blueSoft : "transparent", cursor: "pointer" }}
-              >
-                <span style={{ fontSize: 14, width: 16, textAlign: "center" }}>{item.icon}</span>
-                <span style={{ flex: 1 }}>{item.label}</span>
-                <span style={{ fontSize: 12, color: on ? LT.blue : "rgba(15,23,42,.2)" }}>{on ? "✓" : ""}</span>
-              </button>
-            );
-          })}
-        </RailButton>
-      </div>
-
-      {/* 상단 텔레메트리 바 (항만 종합 현황) */}
+      {/* 상단 현황 바 (항만 종합 현황) */}
       <div
         style={{
+          ...floating,
           position: "absolute",
           top: 16,
           left: "50%",
@@ -309,12 +250,7 @@ export default function DashboardPage() {
           alignItems: "center",
           gap: 18,
           padding: "10px 22px",
-          background: panel,
-          backdropFilter: "blur(14px)",
-          border,
           borderRadius: 14,
-          boxShadow: LT.shadow,
-          color: LT.ink,
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", marginRight: 4 }}>
@@ -330,32 +266,53 @@ export default function DashboardPage() {
         <Metric label="혼잡도" value={String(Math.round(level * 100))} unit="%" accent={congestionColor(level)} />
       </div>
 
-      {/* 좌상단 감속 권고 카드 (혼잡도 기반 JIT 연료저감) */}
-      {layers.advisory && <SpeedAdvisoryCard level={level} />}
+      {/* 오른쪽 열 — 위: 선박 패널, 아래: 감속 권고. 닫으면 각 자리에 버블이 남는다. */}
+      <div
+        style={{
+          position: "absolute",
+          top: 16,
+          right: 16,
+          bottom: 16,
+          width: RIGHT_COLUMN_WIDTH,
+          zIndex: 500,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          gap: 16,
+          pointerEvents: "none",
+        }}
+      >
+        <div style={{ pointerEvents: "auto", width: panels.vessels ? "100%" : undefined, flex: panels.vessels ? 1 : "none", minHeight: 0, display: "flex", flexDirection: "column" }}>
+          {panels.vessels ? (
+            <VesselPanel calls={portCalls} selectedKey={selectedVessel} onSelect={setSelectedVessel} onClose={() => setPanel("vessels", false)} />
+          ) : (
+            <PanelBubble
+              icon={<ImgIcon src="/icons/ship.png" size={30} />}
+              label="선박 목록"
+              badge={String(portCalls.length)}
+              tone={LT.blue}
+              softTone={LT.blueSoft}
+              onClick={() => setPanel("vessels", true)}
+            />
+          )}
+        </div>
+        <div style={{ pointerEvents: "auto", width: panels.advisory ? "100%" : undefined, marginTop: "auto" }}>
+          {panels.advisory ? (
+            <SpeedAdvisoryCard level={level} onClose={() => setPanel("advisory", false)} />
+          ) : (
+            <PanelBubble icon={GaugeIcon} label="감속 권고" tone={LT.green} softTone="rgba(22,163,74,.12)" onClick={() => setPanel("advisory", true)} />
+          )}
+        </div>
+      </div>
 
-      {/* 우측 선박 패널 */}
-      {layers.vessels && <VesselPanel calls={portCalls} selectedKey={selectedVessel} onSelect={setSelectedVessel} />}
-
-      {/* 좌하단 항만별 혼잡도 패널 (지역별 AIS 통계 혼잡도 + 범례) */}
-      {layers.congestion && regions.length > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            left: 84,
-            bottom: 16,
-            maxWidth: "calc(100vw - 480px)",
-            zIndex: 500,
-            padding: "14px 18px 12px",
-            background: panel,
-            backdropFilter: "blur(14px)",
-            border,
-            borderRadius: 16,
-            boxShadow: LT.shadow,
-            color: LT.ink,
-          }}
-        >
-          <div style={{ fontSize: 12, fontWeight: 800, color: muted, letterSpacing: ".04em", marginBottom: 12 }}>항만별 혼잡도</div>
-          <div style={{ display: "flex", gap: 26 }}>
+      {/* 왼쪽 아래 항만별 혼잡도 (지역별 AIS 통계 혼잡도 + 범례) */}
+      {showPortCard ? (
+        <div style={{ ...floating, position: "absolute", left: RAIL_OFFSET, bottom: 16, width: PORT_CARD_WIDTH, zIndex: 500, padding: "14px 18px 12px", borderRadius: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: muted, letterSpacing: ".04em" }}>항만별 혼잡도</span>
+            <CloseButton onClick={() => setPanel("congestion", false)} label="항만별 혼잡도 닫기" />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
             {regions.map((r) => (
               <div key={r.id}>
                 <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
@@ -382,10 +339,23 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
+      ) : (
+        regions.length > 0 && (
+          <div style={{ position: "absolute", left: RAIL_OFFSET, bottom: 24, zIndex: 500 }}>
+            <PanelBubble
+              icon={<ImgIcon src="/icons/chart.png" size={30} />}
+              label="혼잡도"
+              badge={busiest ? `${Math.round(busiest.currentLevel * 100)}%` : undefined}
+              tone={busiest ? congestionColor(busiest.currentLevel) : LT.green}
+              softTone="rgba(239,68,68,.10)"
+              onClick={() => setPanel("congestion", true)}
+            />
+          </div>
+        )
       )}
 
-      {/* AI 어드바이저 FAB — 선박 패널 왼쪽 하단 */}
-      <AdvisorPanel right={RIGHT_PANEL_LEFT_EDGE + 14} />
+      {/* 하단 AI 어드바이저 — 패널을 열고 닫아도 움직이지 않도록 왼쪽 혼잡도 카드와 오른쪽 열 사이 구간에 고정 */}
+      <AdvisorPanel left={RAIL_OFFSET + PORT_CARD_WIDTH + 16} right={RIGHT_EDGE} />
     </div>
   );
 }

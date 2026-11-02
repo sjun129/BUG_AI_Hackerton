@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { AdvisorResult } from "@/frontend/types/domain";
+import { CloseButton } from "./PanelControls";
 
 type Message =
   | { role: "user"; text: string }
@@ -11,11 +12,12 @@ type Message =
 const GREETING: Message = {
   role: "assistant",
   text:
-    "안녕하세요! PORTIQ AI 어드바이저입니다. 현재 선박·혼잡도 상황을 분석해 운영 권고를 제시합니다. 아래 버튼을 누르거나 메시지를 보내 요청하세요.",
+    "안녕하세요! PORTIQ AI 어드바이저입니다. 현재 선박·혼잡도 상황을 분석해 운영 권고를 제시합니다. 아래 빠른 질문을 누르거나 메시지를 보내 요청하세요.",
 };
 
-// right: FAB·채팅 패널의 오른쪽 위치(px). 대시보드는 선박 패널 왼쪽에 맞춰 넘겨준다.
-export default function AdvisorPanel({ right = 24 }: { right?: number } = {}) {
+// left/right: 하단 입력창·채팅 패널이 들어갈 가로 구간(화면 왼쪽·오른쪽 끝에서의 px).
+// 대시보드는 왼쪽 혼잡도 카드와 오른쪽 열 사이를 넘겨준다. 그 구간 가운데에 입력창을 놓는다.
+export default function AdvisorPanel({ left = 24, right = 24 }: { left?: number; right?: number } = {}) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([GREETING]);
   const [input, setInput] = useState("");
@@ -55,220 +57,129 @@ export default function AdvisorPanel({ right = 24 }: { right?: number } = {}) {
     }
   }
 
+  const quick = ["현재 항만 운영 권고를 요청합니다.", "신항 혼잡 원인을 알려줘", "감속 권고 대상 선박은?"];
+
   return (
-    <>
-      {/* 토글 FAB */}
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="portiq-btn"
-          style={{
-            position: "fixed",
-            right,
-            bottom: 24,
-            zIndex: 1000,
-            display: "flex",
-            alignItems: "center",
-            gap: 9,
-            border: 0,
-            background: "linear-gradient(135deg,#2f6bff,#4d7cff)",
-            color: "#fff",
-            fontFamily: "inherit",
-            fontWeight: 700,
-            fontSize: 14.5,
-            padding: "14px 20px",
-            borderRadius: 999,
-            cursor: "pointer",
-            boxShadow: "0 14px 30px rgba(47,107,255,.4)",
-          }}
-        >
-          <span style={{ fontSize: 17 }}>💬</span> AI 어드바이저
-        </button>
-      )}
-
-      {/* 채팅 패널 */}
-      {open && (
-        <div
-          style={{
-            position: "fixed",
-            right,
-            bottom: 24,
-            zIndex: 1000,
-            width: 380,
-            maxWidth: "calc(100vw - 32px)",
-            height: 540,
-            maxHeight: "calc(100vh - 48px)",
-            display: "flex",
-            flexDirection: "column",
-            background: "#fff",
-            borderRadius: 20,
-            border: "1px solid rgba(10,24,48,.08)",
-            boxShadow: "0 24px 60px rgba(20,40,90,.28)",
-            overflow: "hidden",
-          }}
-        >
-          {/* 헤더 */}
+    // 입력창은 항상 같은 자리에 있고, 열면 그 위로 대화 카드가 펼쳐진다.
+    <div style={{ position: "fixed", left, right, bottom: 20, zIndex: 1000, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+      <div style={{ pointerEvents: "auto", width: "min(760px, 100%)", display: "flex", flexDirection: "column", gap: 12 }}>
+        {open && (
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "14px 16px",
-              background: "linear-gradient(135deg,#2f6bff,#4d7cff)",
-              color: "#fff",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 10,
-                  background: "rgba(255,255,255,.18)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 16,
-                }}
-              >
-                🤖
-              </div>
-              <div>
-                <div style={{ fontSize: 14.5, fontWeight: 800, letterSpacing: "-.01em" }}>
-                  AI 운영 어드바이저
-                </div>
-                <div style={{ fontSize: 11.5, opacity: 0.85, fontWeight: 600 }}>
-                  실시간 항만 상황 분석
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={() => setOpen(false)}
-              aria-label="닫기"
-              style={{
-                border: 0,
-                background: "rgba(255,255,255,.15)",
-                color: "#fff",
-                width: 30,
-                height: 30,
-                borderRadius: 9,
-                cursor: "pointer",
-                fontSize: 16,
-                lineHeight: 1,
-              }}
-            >
-              ✕
-            </button>
-          </div>
-
-          {/* 메시지 영역 */}
-          <div
-            ref={scrollRef}
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              padding: "16px",
+              height: "min(460px, calc(100vh - 220px))",
               display: "flex",
               flexDirection: "column",
-              gap: 12,
-              background: "#f6f9ff",
-            }}
-          >
-            {messages.map((msg, i) => (
-              <MessageBubble key={i} msg={msg} />
-            ))}
-            {loading && (
-              <div style={{ alignSelf: "flex-start", ...bubbleBase, background: "#fff", color: "#8a97b3" }}>
-                분석 중<span className="portiq-dots">…</span>
-              </div>
-            )}
-          </div>
-
-          {/* 입력 영역 */}
-          <div
-            style={{
-              padding: "10px 12px",
-              borderTop: "1px solid rgba(10,24,48,.07)",
               background: "#fff",
+              borderRadius: 20,
+              boxShadow: "0 16px 40px rgba(15,23,42,.16), 0 1px 3px rgba(15,23,42,.06)",
+              overflow: "hidden",
             }}
           >
-            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              <button
-                onClick={() => send("현재 항만 운영 권고를 요청합니다.")}
-                disabled={loading}
-                className="portiq-btn"
-                style={{
-                  border: "1px solid rgba(47,107,255,.25)",
-                  background: "#eef4ff",
-                  color: "#2f6bff",
-                  fontFamily: "inherit",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  padding: "6px 11px",
-                  borderRadius: 999,
-                  cursor: loading ? "not-allowed" : "pointer",
-                }}
-              >
-                운영 권고 요청
-              </button>
+            {/* 헤더 */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 16px", borderBottom: "1px solid rgba(15,23,42,.06)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 36, height: 36, borderRadius: 18, background: GRADIENT, display: "flex", alignItems: "center", justifyContent: "center" }}>{SPARKLE}</span>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: "#0f172a" }}>AI 어드바이저</div>
+                  <div style={{ fontSize: 12, color: "#64748b" }}>현재 선박·혼잡도 상황을 분석해 운영 권고를 제시합니다</div>
+                </div>
+              </div>
+              <CloseButton onClick={() => setOpen(false)} label="AI 어드바이저 닫기" />
             </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-                placeholder="메시지를 입력하세요…"
-                style={{
-                  flex: 1,
-                  border: "1px solid rgba(10,24,48,.14)",
-                  borderRadius: 12,
-                  padding: "10px 12px",
-                  fontSize: 13.5,
-                  fontFamily: "inherit",
-                  outline: "none",
-                  color: "#0a1830",
-                  background: "#fff",
-                }}
-              />
-              <button
-                onClick={() => send()}
-                disabled={loading}
-                className="portiq-btn"
-                style={{
-                  border: 0,
-                  background: "linear-gradient(135deg,#2f6bff,#4d7cff)",
-                  color: "#fff",
-                  fontFamily: "inherit",
-                  fontWeight: 700,
-                  fontSize: 14,
-                  padding: "10px 16px",
-                  borderRadius: 12,
-                  cursor: loading ? "not-allowed" : "pointer",
-                  opacity: loading ? 0.6 : 1,
-                }}
-              >
-                전송
-              </button>
+
+            {/* 메시지 */}
+            <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12, background: "#f6f8fc" }}>
+              {messages.map((msg, i) => (
+                <MessageBubble key={i} msg={msg} />
+              ))}
+              {loading && (
+                <div style={{ alignSelf: "flex-start", ...bubbleBase, background: "#fff", color: "#64748b" }}>
+                  분석 중<span className="portiq-dots">…</span>
+                </div>
+              )}
+            </div>
+
+            {/* 빠른 질문 */}
+            <div style={{ display: "flex", gap: 8, padding: "10px 16px", borderTop: "1px solid rgba(15,23,42,.06)", flexWrap: "wrap" }}>
+              {quick.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => send(q)}
+                  disabled={loading}
+                  style={{ border: "none", background: "#ecf1ff", color: "#2563eb", fontFamily: "inherit", fontSize: 12, fontWeight: 700, padding: "6px 12px", borderRadius: 999, cursor: loading ? "not-allowed" : "pointer" }}
+                >
+                  {q}
+                </button>
+              ))}
             </div>
           </div>
-        </div>
-      )}
-    </>
+        )}
+
+        {/* 하단 입력창 */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setOpen(true);
+            send();
+          }}
+          style={{
+            height: 60,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: 8,
+            borderRadius: 30,
+            background: "rgba(255,255,255,.97)",
+            border: "2px solid #ecf1ff",
+            boxShadow: "0 8px 24px rgba(15,23,42,.10), 0 1px 3px rgba(15,23,42,.05)",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            style={{ display: "flex", alignItems: "center", gap: 6, flex: "none", border: 0, borderRadius: 22, padding: "9px 14px 9px 12px", background: GRADIENT, color: "#fff", fontFamily: "inherit", fontSize: 13, fontWeight: 800, cursor: "pointer" }}
+          >
+            {SPARKLE}
+            AI 어드바이저
+          </button>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="무엇이든 물어보세요 · 예) 지금 신항 입항 대기는 얼마나 걸려?"
+            style={{ flex: 1, minWidth: 0, border: 0, outline: "none", background: "transparent", fontFamily: "inherit", fontSize: 14, color: "#0f172a" }}
+          />
+          <button
+            type="submit"
+            aria-label="보내기"
+            disabled={loading}
+            style={{ width: 44, height: 44, flex: "none", border: 0, borderRadius: 22, background: GRADIENT, opacity: loading ? 0.6 : 1, display: "flex", alignItems: "center", justifyContent: "center", cursor: loading ? "not-allowed" : "pointer" }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }
+
+const GRADIENT = "linear-gradient(135deg,#2f6bff,#5b8cff)";
+const SPARKLE = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff">
+    <path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2Z" />
+    <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z" />
+  </svg>
+);
 
 const bubbleBase: React.CSSProperties = {
   maxWidth: "82%",
   padding: "10px 13px",
-  borderRadius: 14,
+  borderRadius: 16,
   fontSize: 13.5,
   lineHeight: 1.55,
-  boxShadow: "0 2px 8px rgba(20,40,90,.05)",
+  boxShadow: "0 1px 3px rgba(15,23,42,.06)",
 };
 
 function MessageBubble({ msg }: { msg: Message }) {

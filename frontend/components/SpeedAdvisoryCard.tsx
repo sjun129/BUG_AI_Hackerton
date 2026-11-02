@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { EnergyDecision, EnergyDecisionApiResult } from "@/frontend/types/energy-decision";
 import { LT } from "./theme";
+import { CloseButton } from "./PanelControls";
 
 const muted = LT.muted;
 const panel = LT.panel;
@@ -10,6 +11,7 @@ const border = LT.border;
 
 interface Props {
   level: number;
+  onClose?: () => void;
 }
 
 function confidenceLabel(confidence: EnergyDecision["confidence"]): string {
@@ -23,7 +25,7 @@ function kgToDisplay(kg: number): { value: string; unit: string } {
   return { value: Math.round(kg).toLocaleString("ko-KR"), unit: "kg" };
 }
 
-export default function SpeedAdvisoryCard({ level }: Props) {
+export default function SpeedAdvisoryCard({ level, onClose }: Props) {
   const [data, setData] = useState<EnergyDecisionApiResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,16 +66,13 @@ export default function SpeedAdvisoryCard({ level }: Props) {
   return (
     <div
       style={{
-        position: "absolute",
-        top: 16,
-        left: 84,
-        width: 370,
-        zIndex: 500,
+        // 위치·폭은 대시보드의 오른쪽 열(선박 패널 아래)이 정한다.
+        flex: "none",
         padding: "14px 16px 12px",
         background: panel,
         backdropFilter: "blur(14px)",
         border,
-        borderRadius: 14,
+        borderRadius: 18,
         boxShadow: LT.shadow,
         color: LT.ink,
         fontFamily: "Pretendard, system-ui, sans-serif",
@@ -81,7 +80,10 @@ export default function SpeedAdvisoryCard({ level }: Props) {
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
         <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: ".02em" }}>감속 권고 · JIT 정시도착</span>
-        <span style={{ fontSize: 9.5, color: muted, fontWeight: 700, letterSpacing: ".06em" }}>연료·탄소</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 9.5, color: muted, fontWeight: 700, letterSpacing: ".06em" }}>연료·탄소</span>
+          {onClose && <CloseButton onClick={onClose} label="감속 권고 닫기" />}
+        </span>
       </div>
 
       <div style={{ fontSize: 10.5, color: muted, fontWeight: 600, marginBottom: 10 }}>

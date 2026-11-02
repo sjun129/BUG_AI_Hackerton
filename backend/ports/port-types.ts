@@ -30,6 +30,7 @@ export interface Ship {
   grossTonnage?: number; // 총톤수
   crewCount?: number; // 승무원수
   agentCompany?: string; // 선박관리/대리점 업체명
+  lastUpdated?: string; // 이 위치가 DB에 기록된 시각(ISO) — 스냅샷 기준 시각 표시·추정 이동용
 }
 
 // 선석 — 선박이 접안하는 시설

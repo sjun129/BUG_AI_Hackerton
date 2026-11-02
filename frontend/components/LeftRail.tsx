@@ -4,151 +4,114 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { LT } from "./theme";
 
-const panel = LT.panel;
-const border = LT.border;
-const HOME_LABEL = "\uD648";
-const BRIGHTNESS_LABEL = "\uBC1D\uAE30";
+// 왼쪽 메뉴 — 아이콘 아래에 메뉴 이름을 붙여 기능을 바로 알아볼 수 있게 한다.
+// 지도가 있는 화면은 bottom 슬롯에 '지도 타입' 같은 버튼을 넣는다.
+export const RAIL_WIDTH = 88;
+export const RAIL_GAP = 16;
+/** 메뉴 오른쪽 끝 + 여백 — 각 페이지 본문이 시작하는 x 좌표 */
+export const RAIL_OFFSET = RAIL_GAP + RAIL_WIDTH + RAIL_GAP;
 
-type IconName = "map" | "ship" | "chart" | "sun";
-type RailItem = { key: string; icon?: IconName; letter?: string; label: string; href?: string };
+const HOME_LABEL = "홈";
 
-function Icon({ name, color }: { name: IconName; color: string }): ReactNode {
-  const common = {
-    width: 21,
-    height: 21,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: color,
-    strokeWidth: 1.9,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-  };
-
-  switch (name) {
-    case "map":
-      return (
-        <svg {...common}>
-          <path d="M9 3 3 5.5v15L9 18l6 3 6-2.5v-15L15 6 9 3Z" />
-          <path d="M9 3v15M15 6v15" />
-        </svg>
-      );
-    case "ship":
-      return (
-        <svg {...common}>
-          <path d="M3 15l1.5 5.5a1 1 0 0 0 1 .7h11a1 1 0 0 0 1-.7L20 15" />
-          <path d="M5 15V9l7-3 7 3v6" />
-          <path d="M12 3v3M9 21V12h6v9" />
-        </svg>
-      );
-    case "chart":
-      return (
-        <svg {...common}>
-          <path d="M6 20V10M12 20V4M18 20v-6" />
-        </svg>
-      );
-    case "sun":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="4" />
-          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-        </svg>
-      );
-  }
+// 메뉴 아이콘: 지도·선박·AI·차트는 디자인 시안의 아이콘 이미지, 시뮬레이션은 선 아이콘.
+export function ImgIcon({ src, size = 24 }: { src: string; size?: number }) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src} alt="" width={size} height={size} style={{ objectFit: "contain" }} />;
 }
+const RouteIcon = (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0F172A" strokeWidth="1.8" strokeLinecap="round">
+    <circle cx="6" cy="19" r="2.6" />
+    <path d="M8.6 19h8.9a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7h8.9" />
+    <circle cx="18" cy="5" r="2.6" />
+  </svg>
+);
+
+type RailItem = { key: string; label: string; href: string; icon: ReactNode };
 
 export const RAIL_ITEMS: RailItem[] = [
-  { key: "map", icon: "map", label: "\uAD00\uC81C \uC9C0\uB3C4", href: "/dashboard" },
-  { key: "ship", icon: "ship", label: "\uC120\uBC15 \uBAA8\uB2C8\uD130\uB9C1", href: "/vessel" },
-  { key: "sim", letter: "S", label: "\uC2DC\uBBAC\uB808\uC774\uC158", href: "/simulation" },
-  { key: "control-room", letter: "AI", label: "AI \uAD00\uC81C\uC0AC", href: "/control-room" },
-  { key: "congestion", icon: "chart", label: "\uD63C\uC7A1\uB3C4 \uD1B5\uACC4", href: "/congestion" },
+  { key: "map", label: "관제 지도", href: "/dashboard", icon: <ImgIcon src="/icons/map.png" /> },
+  { key: "ship", label: "선박 모니터링", href: "/vessel", icon: <ImgIcon src="/icons/ship.png" /> },
+  { key: "sim", label: "시뮬레이션", href: "/simulation", icon: RouteIcon },
+  { key: "control-room", label: "AI 관제사", href: "/control-room", icon: <ImgIcon src="/icons/bot.png" /> },
+  { key: "congestion", label: "혼잡도 통계", href: "/congestion", icon: <ImgIcon src="/icons/chart.png" /> },
 ];
 
-function RailIcon({ item, on }: { item: RailItem; on: boolean }) {
-  const color = on ? "#fff" : LT.muted;
+/** 메뉴 한 칸(아이콘 + 이름). 지도 타입 버튼처럼 링크가 아닌 항목에도 쓴다. */
+export function RailItemView({ icon, label, on, onClick }: { icon: ReactNode; label: string; on: boolean; onClick?: () => void }) {
   return (
     <div
-      title={item.label}
+      title={label}
+      onClick={onClick}
       style={{
-        width: 44,
-        height: 44,
-        borderRadius: 13,
+        width: 72,
+        padding: "10px 4px 8px",
+        borderRadius: 12,
         display: "flex",
+        flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
-        fontSize: item.letter && item.letter.length > 1 ? 12 : 17,
-        fontWeight: 800,
-        letterSpacing: item.letter && item.letter.length > 1 ? "-.02em" : 0,
-        color,
-        background: on ? "linear-gradient(135deg,#2f6bff,#5b8cff)" : "transparent",
-        boxShadow: on ? "0 6px 16px rgba(47,107,255,.35)" : "none",
-        cursor: item.href ? "pointer" : "default",
+        gap: 6,
+        background: on ? LT.blueSoft : "transparent",
+        cursor: "pointer",
       }}
     >
-      {item.letter ? item.letter : item.icon ? <Icon name={item.icon} color={color} /> : null}
+      <span style={{ display: "flex", opacity: on ? 1 : 0.5 }}>{icon}</span>
+      <span style={{ fontSize: 11, fontWeight: on ? 800 : 600, color: on ? LT.blue : LT.muted, textAlign: "center", lineHeight: 1.25 }}>{label}</span>
     </div>
   );
 }
 
-export default function LeftRail({ active }: { active: string }) {
+export default function LeftRail({ active, bottom }: { active: string; bottom?: ReactNode }) {
   return (
-    <div
+    <nav
       style={{
         position: "absolute",
-        top: 16,
-        left: 16,
-        bottom: 16,
-        width: 60,
-        zIndex: 500,
+        top: RAIL_GAP,
+        left: RAIL_GAP,
+        bottom: RAIL_GAP,
+        width: RAIL_WIDTH,
+        zIndex: 700,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: 8,
-        padding: "12px 0",
-        background: panel,
-        backdropFilter: "blur(14px)",
-        border,
-        borderRadius: 18,
-        boxShadow: LT.shadow,
+        gap: 6,
+        padding: "20px 0",
+        background: "#fff",
+        borderRadius: 20,
+        boxShadow: "0 8px 24px rgba(15,23,42,.07), 0 1px 3px rgba(15,23,42,.04)",
+        fontFamily: "Pretendard, system-ui, sans-serif",
       }}
     >
-      <Link
-        href="/"
-        title={HOME_LABEL}
-        style={{
-          width: 42,
-          height: 42,
-          borderRadius: 13,
-          background: "linear-gradient(135deg,#2f6bff,#5b8cff)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: 6,
-          textDecoration: "none",
-          color: "#fff",
-          fontWeight: 900,
-          fontSize: 20,
-          letterSpacing: "-.02em",
-          boxShadow: "0 6px 16px rgba(47,107,255,.35)",
-        }}
-      >
-        C
+      <Link href="/" title={HOME_LABEL} style={{ textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, paddingBottom: 10 }}>
+        <span
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 12,
+            background: "linear-gradient(135deg,#618cff,#2563eb)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#fff",
+            fontWeight: 900,
+            fontSize: 18,
+          }}
+        >
+          P
+        </span>
+        <span style={{ fontSize: 10, fontWeight: 900, color: LT.ink }}>PORTIQ</span>
       </Link>
+      <div style={{ width: 40, height: 1, background: LT.borderColor }} />
 
-      {RAIL_ITEMS.map((item) => {
-        const on = item.href === active;
-        return item.href ? (
-          <Link key={item.key} href={item.href} style={{ textDecoration: "none" }}>
-            <RailIcon item={item} on={on} />
-          </Link>
-        ) : (
-          <RailIcon key={item.key} item={item} on={on} />
-        );
-      })}
+      {RAIL_ITEMS.map((item) => (
+        <Link key={item.key} href={item.href} style={{ textDecoration: "none" }}>
+          <RailItemView icon={item.icon} label={item.label} on={item.href === active} />
+        </Link>
+      ))}
 
-      <div style={{ marginTop: "auto" }}>
-        <RailIcon item={{ key: "sun", icon: "sun", label: BRIGHTNESS_LABEL }} on={false} />
+      <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+        {bottom}
+        <span style={{ fontSize: 10, fontWeight: 600, color: LT.muted }}>부산항</span>
       </div>
-    </div>
+    </nav>
   );
 }

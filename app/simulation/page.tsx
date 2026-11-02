@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { BUSAN_DISPLAY_PORT, SIMULATION_DESTINATION_PORTS } from "@/frontend/config/ports";
-import LeftRail from "@/frontend/components/LeftRail";
+import LeftRail, { RAIL_OFFSET } from "@/frontend/components/LeftRail";
 import ClimateOverridePanel from "@/frontend/components/simulation/ClimateOverridePanel";
 import LiveShipImportModal from "@/frontend/components/simulation/LiveShipImportModal";
 import RouteScenarioResults from "@/frontend/components/simulation/RouteScenarioResults";
@@ -240,7 +240,7 @@ export default function SimulationPage() {
     <div style={shellStyle}>
       <LeftRail active="/simulation" />
 
-      <div style={{ position: "absolute", inset: "16px 16px 16px 84px", display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(380px, 420px)", gap: 14 }}>
+      <div style={{ position: "absolute", inset: `16px 16px 16px ${RAIL_OFFSET}px`, display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(380px, 420px)", gap: 14 }}>
         <main style={{ position: "relative", minWidth: 0, border, borderRadius: 16, overflow: "hidden", background: panel, boxShadow: LT.shadow }}>
           <SimulationMap
             ships={simulatedShips}

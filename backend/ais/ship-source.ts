@@ -27,6 +27,7 @@ interface ShipRow {
   gross_tonnage: number | null;
   crew_count: number | null;
   agent_company: string | null;
+  updated_at: string | null;
 }
 
 function rowToShip(r: ShipRow): Ship {
@@ -49,6 +50,7 @@ function rowToShip(r: ShipRow): Ship {
     ...(r.gross_tonnage != null ? { grossTonnage: r.gross_tonnage } : {}),
     ...(r.crew_count != null ? { crewCount: r.crew_count } : {}),
     ...(r.agent_company ? { agentCompany: r.agent_company } : {}),
+    ...(r.updated_at ? { lastUpdated: new Date(r.updated_at).toISOString() } : {}),
   };
 }
 
@@ -59,7 +61,7 @@ function rowToShip(r: ShipRow): Ship {
  */
 export function shipToRow(
   s: Ship
-): Omit<ShipRow, "previous_port" | "next_port" | "berth_name" | "gross_tonnage" | "crew_count" | "agent_company"> {
+): Omit<ShipRow, "previous_port" | "next_port" | "berth_name" | "gross_tonnage" | "crew_count" | "agent_company" | "updated_at"> {
   return {
     ...shipToPositionRow(s),
     call_sign: s.callSign ?? null,
@@ -105,6 +107,8 @@ export function staticInfoToRow(info: StaticInfo): Partial<Pick<ShipRow, "name" 
 // 끊겨도 마지막 위치가 그대로 남는다. (신선도 필터는 제거됨 — 갱신 시각과 무관하게 DB에
 // 있는 선박을 모두 반환한다. 오래된 마지막 위치도 표시된다는 점에 유의.)
 
+const PAGE_SIZE = 1000;
+
 /**
  * 현재 선박 목록을 반환한다.
  * DB가 설정돼 있으면 DB의 모든 선박을, 아니면(미설정·오류·빈 테이블) 목업에서 읽는다.
@@ -113,12 +117,18 @@ export async function fetchShips(): Promise<Ship[]> {
   const db = getSupabase();
   if (!db) return MOCK_SHIPS;
 
-  const { data, error } = await db.from("ships").select("*");
-  if (error) {
-    console.error("[ship-source] Supabase 조회 실패, 목업으로 폴백:", error.message);
-    return MOCK_SHIPS;
+  // Supabase는 한 번에 최대 1000행만 돌려주므로 페이지 단위로 끝까지 읽는다.
+  const rows: ShipRow[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await db.from("ships").select("*").order("mmsi").range(from, from + PAGE_SIZE - 1);
+    if (error) {
+      console.error("[ship-source] Supabase 조회 실패, 목업으로 폴백:", error.message);
+      return MOCK_SHIPS;
+    }
+    rows.push(...((data ?? []) as ShipRow[]));
+    if (!data || data.length < PAGE_SIZE) break;
   }
-  if (!data || data.length === 0) return MOCK_SHIPS;
+  if (rows.length === 0) return MOCK_SHIPS;
 
-  return (data as ShipRow[]).map(rowToShip);
+  return rows.map(rowToShip);
 }
